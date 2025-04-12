@@ -30,10 +30,13 @@ async def process_song_features(song_id: str, modalities: List[Modality] = None)
     Returns:
         ProcessingJob object with status
     """
+    logger.info(f"Starting processing of song {song_id} for modalities {modalities}")
+    
     # Initialize clients
+    logger.info(f"Initializing clients for song {song_id}")
     postgres_client = PostgresClient(
         user="featurestore_user",
-        password="featurestore_password",
+        password="",  # No password for local development
         database="featurestore"
     )
     milvus_client = MilvusClient()
@@ -147,11 +150,21 @@ async def get_job_status(job_id: str) -> Optional[ProcessingJob]:
 
 async def get_song_feature(song_id: str, modality: Modality) -> Optional[List[float]]:
     """Get features for a song's modality"""
+    logger.info(f"Getting features for song {song_id} / {modality.value}")
     milvus_client = MilvusClient()
     
     try:
         milvus_client.connect()
         features = milvus_client.get_embedding(song_id, modality)
+        if features is None:
+            logger.warning(f"No features found for song {song_id} / {modality.value}")
+            return None
+        
+        # Ensure features is a list, not a numpy array
+        if hasattr(features, 'tolist'):
+            features = features.tolist()
+            
+        logger.info(f"Retrieved features for song {song_id} / {modality.value} with length {len(features)}")
         return features
     except Exception as e:
         logger.error(f"Error getting features for song {song_id} / {modality.value}: {e}")
