@@ -1,4 +1,4 @@
-# Multimodal Feature Store (MMFeatureStore)
+
 
 A comprehensive multimodal feature store system for processing, storing, and retrieving feature vectors from audio and image data. This project enables efficient similarity search across different modalities using state-of-the-art vector database technology.
 
@@ -249,4 +249,4 @@ When running this code, you should expect:
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+
