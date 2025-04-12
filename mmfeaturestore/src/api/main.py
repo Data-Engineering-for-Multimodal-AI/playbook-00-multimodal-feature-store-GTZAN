@@ -99,7 +99,7 @@ async def health():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "postgres": postgres_client.connected,
+        "postgres": postgres_client.pool is not None,
         "milvus": milvus_client.connected
     }
 
@@ -177,8 +177,11 @@ async def process_song(song_id: str, request: ProcessingRequest, background_task
     # Create the job in the database first
     await postgres_client.create_processing_job(job)
     
-    # Run processing in background
-    background_tasks.add_task(process_song_features, song_id, modalities)
+    # Run processing directly instead of in background for testing
+    logger.info(f"Processing job {job_id} for song {song_id} with modalities {modalities}")
+    
+    # Process in a separate task to not block the response
+    asyncio.create_task(process_song_features(song_id, modalities))
     
     return job
 
@@ -195,20 +198,29 @@ async def get_job(job_id: str):
 @app.get("/songs/{song_id}/features/{modality}")
 async def get_features(song_id: str, modality: str):
     """Get features for a song's modality"""
-    from ..worker.tasks import get_song_feature
-    
-    # Check if modality is valid
     try:
-        modality_enum = Modality(modality)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid modality: {modality}")
+        # Check if modality is valid
+        try:
+            modality_enum = Modality(modality)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid modality: {modality}")
+        
+        # Get features
+        from ..worker.tasks import get_song_feature
+        
+        features = await get_song_feature(song_id, modality_enum)
+        if not features:
+            raise HTTPException(status_code=404, detail=f"Features not found for song {song_id} / {modality}")
+        
+        # Convert numpy array to list if needed
+        if hasattr(features, 'tolist'):
+            features = features.tolist()
+        
+        return {"song_id": song_id, "modality": modality, "features": features}
     
-    # Get features
-    features = await get_song_feature(song_id, modality_enum)
-    if not features:
-        raise HTTPException(status_code=404, detail=f"Features not found for song {song_id} / {modality}")
-    
-    return {"song_id": song_id, "modality": modality, "features": features}
+    except Exception as e:
+        logger.error(f"Error getting features: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving features: {str(e)}")
 
 @app.post("/songs/{song_id}/similar", response_model=SimilarSongsResponse)
 async def find_similar(song_id: str, request: SimilarSongsRequest):
