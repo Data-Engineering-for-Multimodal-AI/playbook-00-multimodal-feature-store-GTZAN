@@ -1,4 +1,4 @@
-# MMFeatureStore
+# Multimodal FeatureStore
 
 A multimodal feature store for processing and storing features from audio and image data. This project uses PostgreSQL for metadata storage and Milvus for vector similarity search.
 
