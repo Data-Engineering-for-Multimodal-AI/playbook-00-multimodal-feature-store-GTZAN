@@ -1,252 +1,215 @@
+# Multimodal Feature Store
 
-
-A comprehensive multimodal feature store system for processing, storing, and retrieving feature vectors from audio and image data. This project enables efficient similarity search across different modalities using state-of-the-art vector database technology.
+A robust feature store for audio and image data that enables efficient extraction, storage, and similarity search across multimodal music data.
 
 ## Overview
 
-MMFeatureStore is designed to extract meaningful features from different types of media (audio files, images, and text) and store them in a vector database for efficient similarity search. The system is built with a microservice architecture using FastAPI for the API layer, PostgreSQL for metadata storage, and Milvus for vector similarity search.
+This feature store provides a comprehensive solution for processing and retrieving music data across multiple modalities (audio and image). The system extracts meaningful features from audio files and album artwork, stores them in optimized vector databases, and enables powerful similarity searches to find music with similar acoustic properties or visual aesthetics.
 
-### Key Features
+## Architecture
 
-- **Multimodal Processing**: Extract feature vectors from audio (WAV), image (PNG), and text data
-- **Feature Extraction**: Uses specialized encoders for each modality:
-  - Audio: MFCCs, spectral centroids, chroma features, zero crossing rate, and spectral rolloff
-  - Image: Deep features from a pre-trained ResNet18 model
-  - Text: Embeddings from Sentence Transformers
-- **Vector Database**: Store and search feature vectors using Milvus' similarity search capabilities
-- **RESTful API**: Well-structured API with FastAPI for easy integration
-- **Asynchronous Processing**: Background job processing for handling large files
-- **Job Tracking**: Track the status of processing jobs in PostgreSQL
-- **Similar Content Discovery**: Find similar content across your dataset based on acoustic or visual similarity
+- **PostgreSQL**: Stores metadata and job status information
+- **Milvus**: Vector database for storing and querying high-dimensional feature vectors
+- **FastAPI**: REST API for interacting with the feature store
+- **Encoder Models**: Specialized audio and image encoders that extract features from raw files
 
-## Requirements
+## Setup & Installation
 
-- **Python 3.10+** (Recommended: Python 3.13)
-- **Docker** and **Docker Compose** for running Milvus
-- **PostgreSQL** for metadata storage
-- At least 4GB of RAM for running the services
-- Internet connection for downloading pre-trained models (first run only)
+### Prerequisites
 
-## Installation & Setup
+- Python 3.8+
+- PostgreSQL
+- Milvus
 
-### 1. Clone the Repository
+### Installation Steps
 
-```bash
-git clone https://github.com/Data-Engineering-for-Multimodal-AI/pb2-mmfeaturestore.git
-cd pb2-mmfeaturestore
-```
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/mmfeaturestore.git
+   cd mmfeaturestore
+   ```
 
-### 2. Set Up Python Environment
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-```bash
-# Create and activate a virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On Unix/macOS
-# OR
-.venv\Scripts\activate  # On Windows
+3. Start the PostgreSQL database:
+   ```bash
+   # Setup PostgreSQL with user "featurestore_user" and database "featurestore"
+   createuser --createdb featurestore_user
+   createdb -O featurestore_user featurestore
+   ```
 
-# Install dependencies
-pip install -r requirements.txt
-```
+4. Start the Milvus service:
+   ```bash
+   # If using Docker
+   docker-compose up -d
+   ```
 
-### 3. Start Milvus with Docker Compose
-
-```bash
-docker-compose up -d
-```
-
-This will start:
-- Milvus vector database
-- Etcd (required by Milvus)
-- MinIO (required by Milvus for storage)
-
-### 4. Set Up PostgreSQL
-
-Ensure PostgreSQL is installed and running. Create a database for the feature store:
-
-```bash
-# Access PostgreSQL
-psql -U postgres
-
-# In PostgreSQL prompt
-CREATE DATABASE featurestore;
-CREATE USER featurestore_user WITH PASSWORD 'featurestore_password';
-GRANT ALL PRIVILEGES ON DATABASE featurestore TO featurestore_user;
-```
-
-## Testing the Installation
-
-Run the test script to verify that all components are working properly:
-
-```bash
-cd mmfeaturestore
-python run_test.py
-```
-
-This will test:
-- Audio encoder functionality
-- Image encoder functionality
-- Text encoder functionality
-
-If all tests pass, your setup is complete and ready to use!
-
-## Running the API Server
-
-Start the FastAPI server:
-
-```bash
-cd mmfeaturestore
-python run.py
-```
-
-The API server will be available at http://localhost:8000
-
-You can access the interactive API documentation at http://localhost:8000/docs
-
-## API Usage Guide
-
-### Creating a Song Entry
-
-```bash
-curl -X POST http://localhost:8000/songs \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "Song Title",
-    "artist": "Artist Name",
-    "album": "Album Name",
-    "genre": "rock",
-    "year": 2023
-  }'
-```
-
-This will return a response with the song ID.
-
-### Setting Data Paths
-
-```bash
-# For audio file
-curl -X PUT http://localhost:8000/songs/YOUR_SONG_ID/data/audio \
-  -H "Content-Type: application/json" \
-  -d '{
-    "path": "/absolute/path/to/your/audio.wav"
-  }'
-
-# For album artwork
-curl -X PUT http://localhost:8000/songs/YOUR_SONG_ID/data/image \
-  -H "Content-Type: application/json" \
-  -d '{
-    "path": "/absolute/path/to/your/cover.png"
-  }'
-```
-
-### Processing Features
-
-```bash
-curl -X POST http://localhost:8000/songs/YOUR_SONG_ID/process \
-  -H "Content-Type: application/json" \
-  -d '{
-    "modalities": ["audio", "image"]
-  }'
-```
-
-This will return a job ID which you can use to check the status.
-
-### Checking Job Status
-
-```bash
-curl -X GET http://localhost:8000/jobs/YOUR_JOB_ID
-```
-
-### Finding Similar Songs
-
-```bash
-curl -X POST http://localhost:8000/songs/YOUR_SONG_ID/similar \
-  -H "Content-Type: application/json" \
-  -d '{
-    "modality": "audio",
-    "top_k": 5
-  }'
-```
-
-## Project Structure
-
-```
-mmfeaturestore/
-├── src/                # Main source code
-│   ├── api/            # FastAPI application
-│   │   └── main.py     # API endpoints
-│   ├── db/             # Database clients
-│   │   ├── milvus.py   # Milvus vector database client
-│   │   └── postgres.py # PostgreSQL metadata database client
-│   ├── encoders/       # Feature extractors
-│   │   ├── audio.py    # Audio feature extraction
-│   │   ├── image.py    # Image feature extraction
-│   │   ├── text.py     # Text feature extraction
-│   │   └── factory.py  # Factory pattern for encoders
-│   ├── models/         # Data models
-│   │   └── pipeline.py # Pydantic models
-│   └── worker/         # Background processing
-│       └── tasks.py    # Asynchronous tasks
-├── sample_data/        # Sample files for testing
-├── volumes/            # Mounted volumes for Docker
-├── run.py              # Entry point for the API server
-└── run_test.py         # Testing script
-```
+5. Start the API server:
+   ```bash
+   python run.py
+   ```
 
 ## Sample Data
 
-Sample data is included in the `sample_data` directory for testing purposes. This includes:
-- Sample audio files in WAV format (in `genres_original`)
-- Sample image files in PNG format (in `images_original`)
+The repository includes sample audio and image files for testing, but these **do not appear in GitHub's web interface** because they are binary files. The sample data is organized as follows:
 
-## Known Limitations
+- **Audio samples**: Located in `/mmfeaturestore/sample_data/genres_original/{genre}/*.wav`
+- **Image samples**: Located in `/mmfeaturestore/sample_data/images_original/{genre}/*.png`
 
-1. Currently optimized for WAV and PNG files only
-2. Text encoding requires internet access on first run to download models
-3. Large files (>50MB) may cause memory issues on systems with less than 4GB RAM
+Genres include: pop, rock, jazz, classical, metal, blues, disco, reggae, hiphop, and country.
 
-## What to Expect
+### Obtaining Sample Data
 
-When running this code, you should expect:
+If the sample data is missing when you clone the repository, you can:
 
-1. **Docker Startup**: Setting up Milvus and its dependencies takes approximately 30-60 seconds
-2. **Initial Processing**: The first feature extraction may be slow as models are loaded
-3. **API Performance**: Typical API response times:
-   - Creating songs/metadata: ~50ms
-   - Processing features: Varies by file size (~1-10s)
-   - Similarity search: ~100-200ms
+1. Download the GTZAN dataset for audio samples: [GTZAN Genre Collection](http://marsyas.info/downloads/datasets.html)
+2. Place audio files in the appropriate genre folders under `mmfeaturestore/sample_data/genres_original/`
+3. Create or download album artwork images and place them in the corresponding folders under `mmfeaturestore/sample_data/images_original/`
+
+Or contact the repository maintainer for access to the full sample dataset.
+
+## Usage
+
+### REST API Endpoints
+
+- `POST /songs`: Create a new song record
+- `PUT /songs/{song_id}/data/{modality}`: Add data path for a specific modality
+- `POST /songs/{song_id}/process`: Process features for a song
+- `GET /jobs/{job_id}`: Get processing job status
+- `GET /songs/{song_id}/features/{modality}`: Get extracted features for a modality
+- `POST /songs/{song_id}/similar`: Find similar songs based on features
+
+### Example: Processing a New Song
+
+```python
+import requests
+import json
+import uuid
+
+# API base URL
+BASE_URL = "http://localhost:8000"
+
+# Create a new song
+song_id = str(uuid.uuid4())
+song_data = {
+    "id": song_id,
+    "title": "Rock Sample",
+    "artist": "Sample Artist",
+    "album": "Rock Collection",
+    "genre": "rock",
+    "year": 2024
+}
+
+response = requests.post(f"{BASE_URL}/songs", json=song_data)
+print(f"Created song: {response.json()}")
+
+# Set audio and image paths
+audio_path = "/path/to/audio.wav"
+image_path = "/path/to/cover.png"
+
+requests.put(
+    f"{BASE_URL}/songs/{song_id}/data/audio", 
+    json={"path": audio_path}
+)
+requests.put(
+    f"{BASE_URL}/songs/{song_id}/data/image", 
+    json={"path": image_path}
+)
+
+# Process features
+response = requests.post(
+    f"{BASE_URL}/songs/{song_id}/process", 
+    json={"modalities": ["audio", "image"]}
+)
+job_id = response.json()["job_id"]
+
+# Check job status
+response = requests.get(f"{BASE_URL}/jobs/{job_id}")
+print(f"Job status: {response.json()}")
+
+# Find similar songs
+response = requests.post(
+    f"{BASE_URL}/songs/{song_id}/similar",
+    json={"modality": "audio", "top_k": 5}
+)
+print(f"Similar songs: {response.json()}")
+```
+
+## Testing Scripts
+
+The repository includes several test scripts for exploring and validating the feature store functionality:
+
+1. `test_new_song.py`: Tests creating a single song, extracting features, and performing similarity search
+2. `explore_genres.py`: Processes samples from different music genres and compares similarities between them
+3. `test_features.py`: Validates feature extraction for different modalities
+4. `test_similarity.py`: Tests similarity search functionality
+5. `test_api_curl.sh`: Example cURL commands for interacting with the API
+
+## Feature Extraction Process
+
+1. **Audio Features**:
+   - Processes WAV files to extract a 28-dimensional feature vector
+   - Features capture timbral, rhythmic, and harmonic characteristics
+
+2. **Image Features**:
+   - Processes PNG/JPEG album artwork using deep learning models
+   - Extracts a 512-dimensional feature vector capturing visual characteristics
 
 ## Troubleshooting
 
-### Common Issues
+### Known Issues
 
-1. **Milvus Connection Error**:
-   - Ensure Docker is running and the containers are up (`docker ps`)
-   - Check if Milvus is accessible on port 19530 (`telnet localhost 19530`)
+1. **Milvus Connection**: Ensure Milvus is running before starting the server:
+   ```bash
+   docker ps | grep milvus
+   ```
+   If Milvus isn't running, restart it with:
+   ```bash
+   docker-compose up -d
+   ```
 
-2. **PostgreSQL Connection Error**:
-   - Verify PostgreSQL is running (`pg_isready`)
-   - Confirm database credentials in `src/db/postgres.py`
+2. **Numpy Serialization Error**: When accessing feature endpoints directly, you may encounter:
+   ```
+   TypeError: 'numpy.float32' object is not iterable
+   ```
+   This is due to serialization issues with raw numpy vectors. Use the `/similar` endpoint instead which properly serializes the results.
 
-3. **Encoder Errors**:
-   - For audio encoding errors, ensure librosa and its dependencies are correctly installed
-   - For image encoding errors, check if torch and torchvision are properly installed
+3. **Bottleneck Warning**: You may see a warning about the bottleneck library version:
+   ```
+   UserWarning: Pandas requires version '1.3.6' or newer of 'bottleneck' (version '1.3.5' currently installed).
+   ```
+   This is a non-critical warning and can be safely ignored, or you can update bottleneck with:
+   ```bash
+   pip install --upgrade bottleneck
+   ```
 
-## Performance Considerations
+4. **Port Already In Use**: If you see an error like:
+   ```
+   [Errno 48] error while attempting to bind on address ('0.0.0.0', 8000): address already in use
+   ```
+   Kill the existing process using port 8000:
+   ```bash
+   lsof -i :8000
+   kill <PID>
+   ```
 
-- Audio encoding: ~1-5 seconds per file
-- Image encoding: ~0.5-2 seconds per file
-- Text encoding: ~0.1-0.5 seconds per text
-- Vector search: ~50-200ms for top-k results
+## Dependencies
 
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+- `fastapi`: Web framework for the API
+- `pymilvus`: Client for Milvus vector database
+- `asyncpg`: Async PostgreSQL client
+- `numpy`: Numerical computing
+- `librosa`: Audio processing
+- `torchvision`: Image processing
+- `pandas`: Data manipulation
+- `pydantic`: Data validation
+- `uvicorn`: ASGI server
 
 ## License
+
+MIT
 
 
