@@ -6,20 +6,75 @@ A robust feature store for audio and image data that enables efficient extractio
 
 This feature store provides a comprehensive solution for processing and retrieving music data across multiple modalities (audio and image). The system extracts meaningful features from audio files and album artwork, stores them in optimized vector databases, and enables powerful similarity searches to find music with similar acoustic properties or visual aesthetics.
 
+### Key Features
+
+- **Multimodal Feature Extraction**: Extract rich feature vectors from both audio files and images
+- **Vector Similarity Search**: Find songs with similar audio characteristics or visual album art
+- **Asynchronous Processing**: Background job processing for handling large files
+- **REST API Interface**: Simple HTTP endpoints for all operations
+- **Modular Architecture**: Easy to extend with new modalities or encoder models
+
 ## Architecture
 
+The feature store uses a modular architecture with several key components:
+
 - **PostgreSQL**: Stores metadata and job status information
+  - Song metadata (artist, title, etc.)
+  - Data file paths
+  - Processing job status tracking
+
 - **Milvus**: Vector database for storing and querying high-dimensional feature vectors
+  - Efficient storage of audio and image feature vectors
+  - Fast approximate nearest neighbor search
+  - Separate collections for each modality (audio/image)
+
 - **FastAPI**: REST API for interacting with the feature store
+  - Asynchronous request handling
+  - Data validation with Pydantic
+  - Background tasks for long-running operations
+
 - **Encoder Models**: Specialized audio and image encoders that extract features from raw files
+  - Audio: 28-dimensional feature vectors capturing timbre, rhythm, etc.
+  - Image: 512-dimensional feature vectors using CNN-based model
+
+### Data Model
+
+The system uses the following data model:
+
+- **Song**: Core entity representing a music track
+  - Unique ID (UUID)
+  - Metadata (title, artist, album, genre, year)
+  - Data paths for different modalities
+
+- **Job**: Represents a feature extraction process
+  - Unique ID (UUID)
+  - Associated song ID
+  - Status for each modality (pending, processing, processed, error)
+  - Timestamps
+
+- **Feature Vector**: Generated embeddings for each modality
+  - Song ID reference
+  - Modality type (audio/image)
+  - High-dimensional vector data
 
 ## Setup & Installation
 
+### System Requirements
+
+- **CPU**: 2+ cores recommended (4+ for faster processing)
+- **RAM**: Minimum 4GB (8GB+ recommended, especially for processing multiple files)
+- **Storage**: 
+  - 500MB for application code
+  - 1GB+ for sample data
+  - Additional space for your music collection
+- **Operating System**: Linux, macOS, or Windows with Docker support
+
 ### Prerequisites
 
-- Python 3.8+
-- PostgreSQL
-- Milvus
+- **Python 3.8+**
+- **PostgreSQL 12+**
+- **Docker** (for running Milvus)
+- **Docker Compose** (for managing Milvus services)
 
 ### Installation Steps
 
@@ -43,7 +98,25 @@ This feature store provides a comprehensive solution for processing and retrievi
 
 4. Start the Milvus service:
    ```bash
-   # If using Docker
+   # Using Docker Compose (recommended)
+   docker-compose up -d
+   ```
+
+   Verify Milvus is running:
+   ```bash
+   # Check container status
+   docker ps | grep milvus
+   
+   # Check Milvus logs for any issues
+   docker logs mmfeaturestore_standalone_1
+   
+   # Test connection to Milvus
+   curl http://localhost:19530/healthz
+   ```
+   
+   If you need to restart Milvus:
+   ```bash
+   docker-compose down
    docker-compose up -d
    ```
 
@@ -195,6 +268,47 @@ The repository includes several test scripts for exploring and validating the fe
    lsof -i :8000
    kill <PID>
    ```
+
+### 1. Milvus Connection Issues
+
+If you see:
+```
+ERROR: Failed to connect to Milvus: <MilvusException: (code=2, message=Fail connecting to server on localhost:19530)>
+WARNING: Failed to connect to Milvus, vector operations will be disabled
+```
+
+**Solution:**
+
+First verify Milvus is running:
+```bash
+# Check if Milvus containers are running
+docker ps | grep milvus
+```
+
+If containers are not running:
+```bash
+# Start Milvus and related services
+docker-compose up -d
+```
+
+If containers are running but you still can't connect:
+```bash
+# Check Milvus logs for errors
+docker logs mmfeaturestore_standalone_1
+
+# Restart Milvus containers
+docker-compose restart
+
+# If problems persist, recreate the containers
+docker-compose down
+docker-compose up -d
+```
+
+Common issues:
+- Docker not running
+- Port 19530 is in use by another application
+- Insufficient memory for Milvus (check Docker resource limits)
+- Corrupted Milvus data (check logs for any data errors)
 
 ## Dependencies
 
@@ -488,13 +602,37 @@ WARNING: Failed to connect to Milvus, vector operations will be disabled
 ```
 
 **Solution:**
+
+First verify Milvus is running:
 ```bash
 # Check if Milvus containers are running
 docker ps | grep milvus
+```
 
-# If containers are not running, start them
+If containers are not running:
+```bash
+# Start Milvus and related services
 docker-compose up -d
 ```
+
+If containers are running but you still can't connect:
+```bash
+# Check Milvus logs for errors
+docker logs mmfeaturestore_standalone_1
+
+# Restart Milvus containers
+docker-compose restart
+
+# If problems persist, recreate the containers
+docker-compose down
+docker-compose up -d
+```
+
+Common issues:
+- Docker not running
+- Port 19530 is in use by another application
+- Insufficient memory for Milvus (check Docker resource limits)
+- Corrupted Milvus data (check logs for any data errors)
 
 ### 2. Port Already in Use
 
@@ -530,5 +668,66 @@ curl -X POST http://localhost:8000/songs/{song_id}/similar \
   -H "Content-Type: application/json" \
   -d '{"modality":"audio","top_k":3}'
 ```
+
+## Project Structure
+
+The repository is organized as follows:
+
+```
+mmfeaturestore/
+├── docker-compose.yml            # Docker configuration for Milvus
+├── requirements.txt              # Python dependencies
+├── run.py                        # Entry point to start the API server
+├── test_new_song.py              # Basic test script
+├── explore_genres.py             # Script to compare different genres
+├── test_similarity.py            # Script to test similarity search
+├── src/                          # Source code
+│   ├── api/                      # API endpoints and route handlers
+│   │   ├── main.py               # FastAPI application and routes
+│   │   ├── models.py             # Pydantic models for requests/responses
+│   │   └── endpoints/            # Endpoint implementations
+│   ├── db/                       # Database connections and operations
+│   │   ├── postgres.py           # PostgreSQL client
+│   │   └── milvus.py             # Milvus client
+│   ├── encoders/                 # Feature extraction modules
+│   │   ├── audio.py              # Audio feature extraction
+│   │   ├── image.py              # Image feature extraction
+│   │   └── factory.py            # Encoder factory
+│   └── worker/                   # Background job processing
+│       └── tasks.py              # Async feature extraction tasks
+└── sample_data/                  # Sample audio and image files
+    ├── genres_original/          # Audio samples organized by genre
+    └── images_original/          # Image samples organized by genre
+```
+
+### Key Components
+
+- **API Layer**: Handles HTTP requests and responses (FastAPI)
+- **Database Layer**: Manages data persistence (PostgreSQL and Milvus)
+- **Encoder Layer**: Extracts features from raw files (Audio/Image processors)
+- **Worker Layer**: Handles background processing of extraction tasks
+
+## Contributing
+
+Contributions to improve the feature store are welcome! Here's how you can contribute:
+
+1. **Fork the repository**
+2. **Create a feature branch** (`git checkout -b feature/amazing-feature`)
+3. **Commit your changes** (`git commit -m 'Add some amazing feature'`)
+4. **Push to the branch** (`git push origin feature/amazing-feature`)
+5. **Open a Pull Request**
+
+Before submitting a pull request, please:
+- Ensure tests are passing
+- Add documentation for new features
+- Follow the existing code style
+
+### Development Setup
+
+For development, it's recommended to:
+1. Create a virtual environment
+2. Install dependencies with `pip install -r requirements.txt`
+3. Install development dependencies with `pip install -r requirements-dev.txt` (if available)
+4. Run tests before submitting changes
 
 
