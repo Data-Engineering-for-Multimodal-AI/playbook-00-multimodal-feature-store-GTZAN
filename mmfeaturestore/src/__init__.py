@@ -1,9 +1,1 @@
-import logging
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-
-from . import models
-from . import encoders
+"""Multimodal feature store for music: encoders, PostgreSQL and Milvus clients, a worker and a REST API."""

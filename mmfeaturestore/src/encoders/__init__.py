@@ -1,6 +1,1 @@
-from .audio import AudioEncoder
-from .image import ImageEncoder
-from .text import TextEncoder
-from .factory import EncoderFactory
-
-__all__ = ['AudioEncoder', 'ImageEncoder', 'TextEncoder', 'EncoderFactory']
+"""Feature encoders; import the module you need (the lyrics model is large)."""

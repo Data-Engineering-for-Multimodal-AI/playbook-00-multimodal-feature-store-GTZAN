@@ -1,189 +1,104 @@
-import os
+"""Milvus: one collection of vectors per modality (song_audio, song_image, song_lyrics), cosine
+similarity, HNSW index. Uses pymilvus's MilvusClient API. Collections persist across restarts; the
+song ID is the primary key, so processing a song again replaces its vector."""
 import logging
 from typing import Dict, List, Optional, Tuple
-import numpy as np
-from pymilvus import (
-    Collection,
-    CollectionSchema,
-    FieldSchema,
-    DataType,
-    connections,
-    utility,
-)
 
+from pymilvus import DataType
+from pymilvus import MilvusClient as _Milvus
+
+from .. import config
 from ..models.pipeline import Modality
 
-class MilvusClient:
-    """Client for Milvus vector database operations"""
 
-    def __init__(self, host: Optional[str] = None, port: Optional[str] = None):
-        """Initialize Milvus client with host and port"""
-        self.host = host or os.environ.get("MILVUS_HOST", "localhost")
-        self.port = port or os.environ.get("MILVUS_PORT", "19530")
+class MilvusClient:
+    def __init__(self, host: Optional[str] = None, port: Optional[int] = None):
+        self.uri = f"http://{host or config.MILVUS_HOST}:{port or config.MILVUS_PORT}"
         self.logger = logging.getLogger(__name__)
-        self.collections = {}
-        self.connected = False
+        self.client: Optional[_Milvus] = None
+        self.ready: Dict[Modality, bool] = {}
+
+    @property
+    def connected(self) -> bool:
+        return self.client is not None
 
     def connect(self) -> None:
-        """Connect to Milvus"""
-        try:
-            connections.connect(
-                alias="default",
-                host=self.host,
-                port=self.port
-            )
-            self.logger.info(f"Connected to Milvus at {self.host}:{self.port}")
-            self.connected = True
-        except Exception as e:
-            self.logger.error(f"Failed to connect to Milvus: {e}")
-            raise
+        self.client = _Milvus(uri=self.uri)
 
     def disconnect(self) -> None:
-        """Disconnect from Milvus"""
-        if self.connected:
-            connections.disconnect("default")
-            self.connected = False
-            self.logger.info("Disconnected from Milvus")
+        if self.client:
+            self.client.close()
+            self.client = None
 
-    def create_collection(self, modality: Modality, dim: int) -> None:
-        """Create a collection for a specific modality if it doesn't exist"""
-        collection_name = f"song_{modality.value}"
-        
-        if utility.has_collection(collection_name):
-            self.logger.info(f"Collection {collection_name} already exists")
-            self.collections[modality] = Collection(collection_name)
-            return
-        
-        # Define collection schema
-        fields = [
-            FieldSchema(name="id", dtype=DataType.VARCHAR, max_length=36, is_primary=True),
-            FieldSchema(name="song_id", dtype=DataType.VARCHAR, max_length=36),
-            FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=dim)
-        ]
-        schema = CollectionSchema(fields=fields, description=f"Song {modality.value} embeddings")
-        
-        # Create collection
-        collection = Collection(name=collection_name, schema=schema)
-        
-        # Create index for vector field
-        index_params = {
-            "metric_type": "COSINE",
-            "index_type": "IVF_FLAT",
-            "params": {"nlist": 1024}
-        }
-        collection.create_index(field_name="embedding", index_params=index_params)
-        
-        self.logger.info(f"Created collection {collection_name} with dimension {dim}")
-        self.collections[modality] = collection
+    @staticmethod
+    def name(modality: Modality) -> str:
+        return f"{config.COLLECTION_PREFIX}_{modality.value}"
 
-    def insert_embedding(self, song_id: str, modality: Modality, embedding: List[float]) -> str:
-        """Insert embedding for a song"""
-        collection_name = f"song_{modality.value}"
-        
-        if modality not in self.collections:
-            self.create_collection(modality, len(embedding))
-        
-        collection = self.collections[modality]
-        
-        # Generate a unique ID for this embedding
-        import uuid
-        embedding_id = str(uuid.uuid4())
-        
-        # Insert the embedding
-        data = [
-            [embedding_id],
-            [song_id],
-            [embedding]
-        ]
-        collection.insert(data)
-        
-        self.logger.info(f"Inserted embedding for song {song_id} in modality {modality.value}")
-        return embedding_id
+    def ensure(self, modality: Modality, dim: Optional[int] = None) -> bool:
+        """Make sure the modality's collection exists (created when dim is given) and is loaded."""
+        if self.ready.get(modality):
+            return True
+        name = self.name(modality)
+        if not self.client.has_collection(name):
+            if dim is None:
+                return False
+            schema = self.client.create_schema(auto_id=False, description=f"Song {modality.value} embeddings")
+            schema.add_field("song_id", DataType.VARCHAR, max_length=64, is_primary=True)
+            schema.add_field("embedding", DataType.FLOAT_VECTOR, dim=dim)
+            index = self.client.prepare_index_params()
+            index.add_index("embedding", index_type="HNSW", metric_type="COSINE", params={"M": 16, "efConstruction": 200})
+            self.client.create_collection(name, schema=schema, index_params=index)
+            self.logger.info(f"Created collection {name} (dim {dim})")
+        self.client.load_collection(name)
+        self.ready[modality] = True
+        return True
+
+    def count(self, modality: Modality) -> int:
+        if not self.ensure(modality):
+            return 0
+        return self.client.query(self.name(modality), filter="", output_fields=["count(*)"])[0]["count(*)"]
+
+    def drop(self, modality: Modality) -> None:
+        self.ready.pop(modality, None)
+        if self.client.has_collection(self.name(modality)):
+            self.client.drop_collection(self.name(modality))
+
+    def upsert(self, modality: Modality, song_ids: List[str], embeddings: List[List[float]]) -> None:
+        self.ensure(modality, len(embeddings[0]))
+        self.client.upsert(self.name(modality), [{"song_id": s, "embedding": e} for s, e in zip(song_ids, embeddings)])
+
+    def flush(self) -> None:
+        for modality in self.ready:
+            self.client.flush(self.name(modality))
 
     def get_embedding(self, song_id: str, modality: Modality) -> Optional[List[float]]:
-        """Get embedding for a song"""
-        collection_name = f"song_{modality.value}"
-        
-        if not utility.has_collection(collection_name):
-            self.logger.warning(f"Collection {collection_name} does not exist")
+        if not self.ensure(modality):
             return None
-        
-        if modality not in self.collections:
-            self.collections[modality] = Collection(collection_name)
-        
-        collection = self.collections[modality]
-        collection.load()
-        
-        # Query the embedding
-        results = collection.query(
-            expr=f'song_id == "{song_id}"',
-            output_fields=["embedding"]
-        )
-        
-        collection.release()
-        
-        if not results:
-            return None
-        
-        return results[0]["embedding"]
+        rows = self.client.get(self.name(modality), ids=[song_id], output_fields=["embedding"])
+        return [float(x) for x in rows[0]["embedding"]] if rows else None
 
-    def search_similar(self, modality: Modality, query_embedding: List[float], top_k: int = 10) -> List[Tuple[str, float]]:
-        """Search for similar songs based on embedding"""
-        collection_name = f"song_{modality.value}"
-        
-        if not utility.has_collection(collection_name):
-            self.logger.warning(f"Collection {collection_name} does not exist")
+    def all_embeddings(self, modality: Modality) -> Dict[str, List[float]]:
+        if not self.ensure(modality):
+            return {}
+        out = {}
+        iterator = self.client.query_iterator(self.name(modality), batch_size=500, filter="",
+                                              output_fields=["song_id", "embedding"])
+        while batch := iterator.next():
+            out.update({row["song_id"]: [float(x) for x in row["embedding"]] for row in batch})
+        iterator.close()
+        return out
+
+    def search_similar(self, modality: Modality, query: List[float], top_k: int = 10,
+                       exclude: Optional[str] = None) -> List[Tuple[str, float]]:
+        """The most similar songs (cosine similarity, highest first), without `exclude` (the query song)."""
+        if not self.ensure(modality):
             return []
-        
-        if modality not in self.collections:
-            self.collections[modality] = Collection(collection_name)
-        
-        collection = self.collections[modality]
-        collection.load()
-        
-        # Search for similar embeddings
-        search_params = {
-            "metric_type": "COSINE",
-            "params": {"nprobe": 10}
-        }
-        
-        results = collection.search(
-            data=[query_embedding],
-            anns_field="embedding",
-            param=search_params,
-            limit=top_k,
-            output_fields=["song_id"]
-        )
-        
-        collection.release()
-        
-        # Extract song_ids and distances
-        similar_songs = []
-        for hits in results:
-            for hit in hits:
-                similar_songs.append((hit.entity.get("song_id"), hit.distance))
-        
-        return similar_songs
+        hits = self.client.search(self.name(modality), data=[list(map(float, query))], limit=top_k,
+                                  filter=f'song_id != "{_quote(exclude)}"' if exclude else "",
+                                  search_params={"metric_type": "COSINE", "params": {"ef": max(64, top_k * 2)}},
+                                  output_fields=["song_id"])
+        return [(hit["entity"]["song_id"], float(hit["distance"])) for hit in hits[0]]
 
-    def delete_embedding(self, song_id: str, modality: Modality) -> None:
-        """Delete embedding for a song"""
-        collection_name = f"song_{modality.value}"
-        
-        if not utility.has_collection(collection_name):
-            self.logger.warning(f"Collection {collection_name} does not exist")
-            return
-        
-        if modality not in self.collections:
-            self.collections[modality] = Collection(collection_name)
-        
-        collection = self.collections[modality]
-        
-        # Delete embeddings for this song
-        collection.delete(f'song_id == "{song_id}"')
-        
-        self.logger.info(f"Deleted embeddings for song {song_id} in modality {modality.value}")
-        
-    def has_embedding(self, song_id: str, modality: Modality) -> bool:
-        """Check if a song has an embedding for a specific modality"""
-        embedding = self.get_embedding(song_id, modality)
-        return embedding is not None 
+
+def _quote(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
