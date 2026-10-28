@@ -1,52 +1,53 @@
-import os
+"""
+The feature store's REST API.
+
+  POST /songs                              create (or update) a song
+  GET  /songs/{id}                         a song and its data paths
+  PUT  /songs/{id}/data/{modality}         set the file for a modality (audio, image, lyrics)
+  POST /songs/{id}/process                 extract features in the background -> a job
+  GET  /jobs/{job_id}                      the job's status per modality
+  GET  /songs/{id}/features/{modality}     the stored vector
+  POST /songs/{id}/similar                 the most similar songs, by one modality
+  GET  /genres                             songs per genre
+"""
 import asyncio
 import logging
 import uuid
-from typing import Dict, List, Optional, Union
-from fastapi import FastAPI, HTTPException, BackgroundTasks
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-import uvicorn
+from contextlib import asynccontextmanager
+from typing import List, Optional
 
-from ..models.pipeline import Modality, Song, ProcessingJob, ProcessingResult
-from ..db.postgres import PostgresClient
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+
 from ..db.milvus import MilvusClient
-from ..worker.tasks import process_song_features
+from ..db.postgres import PostgresClient
+from ..encoders.factory import EncoderFactory
+from ..models.pipeline import FeatureStatus, Modality, ProcessingJob, Song
+from ..worker.tasks import process_song_features, resolve_data_path
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
+postgres = PostgresClient()
+milvus = MilvusClient()
+encoders = EncoderFactory()
+background: set = set()
 
-# Create FastAPI app
-app = FastAPI(
-    title="Multimodal Feature Store",
-    description="API for storing and retrieving multimodal song features",
-    version="0.1.0",
-)
 
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await postgres.connect()
+    milvus.connect()
+    yield
+    for task in list(background):
+        await task
+    await postgres.disconnect()
+    milvus.disconnect()
 
-# Database connections
-postgres_client = PostgresClient(
-    user="featurestore_user",
-    password="",  # No password for local development
-    host="localhost",
-    port="5432",
-    database="featurestore"
-)
-milvus_client = MilvusClient()
 
-# Models for API requests/responses
+app = FastAPI(title="Multimodal Feature Store", version="2026.10",
+              description="Audio and spectrogram features for music, in PostgreSQL and Milvus", lifespan=lifespan)
+
+
 class SongCreate(BaseModel):
     id: Optional[str] = None
     title: str
@@ -55,192 +56,124 @@ class SongCreate(BaseModel):
     genre: Optional[str] = None
     year: Optional[int] = None
 
+
 class DataPathUpdate(BaseModel):
     path: str
 
+
 class ProcessingRequest(BaseModel):
-    modalities: List[str] = [m.value for m in Modality]
+    modalities: List[str] = [Modality.AUDIO.value, Modality.IMAGE.value]
+
 
 class SimilarSongsRequest(BaseModel):
     modality: str
     top_k: int = 10
 
+
+class SimilarSong(BaseModel):
+    song_id: str
+    title: str
+    genre: Optional[str]
+    similarity: float
+
+
 class SimilarSongsResponse(BaseModel):
     song_id: str
-    similar_songs: List[str]
     modality: str
+    similar_songs: List[SimilarSong]
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database connections on startup"""
-    await postgres_client.connect()
-    await postgres_client.create_tables()
-    
+
+def _modality(value: str) -> Modality:
     try:
-        milvus_client.connect()
-        logger.info("Connected to Milvus")
-    except Exception as e:
-        logger.warning(f"Failed to connect to Milvus: {e}")
+        return Modality(value)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid modality {value!r}: one of {[m.value for m in Modality]}")
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Close database connections on shutdown"""
-    await postgres_client.disconnect()
-    if milvus_client.connected:
-        milvus_client.disconnect()
 
-@app.get("/")
-async def root():
-    """Root endpoint"""
-    return {"message": "Welcome to the Multimodal Feature Store API"}
-
-@app.get("/health")
-async def health():
-    """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "postgres": postgres_client.pool is not None,
-        "milvus": milvus_client.connected
-    }
-
-@app.post("/songs", response_model=Song)
-async def create_song(song: SongCreate):
-    """Create a new song"""
-    song_id = song.id or str(uuid.uuid4())
-    
-    song_model = Song(
-        id=song_id,
-        title=song.title,
-        artist=song.artist,
-        album=song.album,
-        genre=song.genre,
-        year=song.year
-    )
-    
-    await postgres_client.create_song(song_model)
-    return song_model
-
-@app.get("/songs/{song_id}", response_model=Song)
-async def get_song(song_id: str):
-    """Get a song by ID"""
-    song = await postgres_client.get_song(song_id)
+async def _song(song_id: str) -> Song:
+    song = await postgres.get_song(song_id)
     if not song:
         raise HTTPException(status_code=404, detail="Song not found")
     return song
 
+
+@app.get("/")
+async def root():
+    return {"message": "Multimodal Feature Store API", "docs": "/docs"}
+
+
+@app.get("/health")
+async def health():
+    return {"status": "healthy", "postgres": postgres.pool is not None, "milvus": milvus.connected}
+
+
+@app.post("/songs", response_model=Song)
+async def create_song(song: SongCreate):
+    created = Song(id=song.id or str(uuid.uuid4()), **song.model_dump(exclude={"id"}))
+    await postgres.upsert_song(created)
+    return await postgres.get_song(created.id)
+
+
+@app.get("/songs/{song_id}", response_model=Song)
+async def get_song(song_id: str):
+    return await _song(song_id)
+
+
+@app.get("/genres")
+async def genres():
+    return await postgres.genre_counts()
+
+
 @app.put("/songs/{song_id}/data/{modality}", response_model=Song)
 async def update_song_data_path(song_id: str, modality: str, data: DataPathUpdate):
-    """Update a song's data path for a specific modality"""
-    # Check if song exists
-    song = await postgres_client.get_song(song_id)
-    if not song:
-        raise HTTPException(status_code=404, detail="Song not found")
-    
-    # Check if modality is valid
+    await _song(song_id)
     try:
-        modality_enum = Modality(modality)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid modality: {modality}")
-    
-    # Update data path
-    await postgres_client.update_song_data_path(song_id, modality_enum, data.path)
-    
-    # Return updated song
-    return await postgres_client.get_song(song_id)
+        resolve_data_path(data.path)
+    except (ValueError, FileNotFoundError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    await postgres.update_song_data_path(song_id, _modality(modality), data.path)
+    return await postgres.get_song(song_id)
+
 
 @app.post("/songs/{song_id}/process", response_model=ProcessingJob)
-async def process_song(song_id: str, request: ProcessingRequest, background_tasks: BackgroundTasks):
-    """Process song features for specified modalities"""
-    # Check if song exists
-    song = await postgres_client.get_song(song_id)
-    if not song:
-        raise HTTPException(status_code=404, detail="Song not found")
-    
-    # Check if modalities are valid
-    modalities = []
-    for m in request.modalities:
-        try:
-            modality_enum = Modality(m)
-            modalities.append(modality_enum)
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid modality: {m}")
-    
-    # Create processing job
-    job_id = str(uuid.uuid4())
-    job = ProcessingJob(
-        job_id=job_id,
-        song_id=song_id,
-        modalities=request.modalities,
-        status={m: "pending" for m in request.modalities}
-    )
-    
-    # Create the job in the database first
-    await postgres_client.create_processing_job(job)
-    
-    # Run processing directly instead of in background for testing
-    logger.info(f"Processing job {job_id} for song {song_id} with modalities {modalities}")
-    
-    # Process in a separate task to not block the response
-    asyncio.create_task(process_song_features(song_id, modalities))
-    
+async def process_song(song_id: str, request: ProcessingRequest = ProcessingRequest()):
+    await _song(song_id)
+    modalities = [_modality(m) for m in request.modalities]
+    job = ProcessingJob(job_id=str(uuid.uuid4()), song_id=song_id, modalities=[m.value for m in modalities],
+                        status={m.value: FeatureStatus.PENDING.value for m in modalities})
+    await postgres.create_processing_job(job)
+    task = asyncio.create_task(process_song_features(postgres, milvus, encoders, song_id, modalities, job.job_id))
+    background.add(task)
+    task.add_done_callback(background.discard)
     return job
+
 
 @app.get("/jobs/{job_id}", response_model=ProcessingJob)
 async def get_job(job_id: str):
-    """Get a processing job by ID"""
-    from ..worker.tasks import get_job_status
-    
-    job = await get_job_status(job_id)
+    job = await postgres.get_processing_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
 
+
 @app.get("/songs/{song_id}/features/{modality}")
-async def get_features(song_id: str, modality: str):
-    """Get features for a song's modality"""
-    try:
-        # Check if modality is valid
-        try:
-            modality_enum = Modality(modality)
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid modality: {modality}")
-        
-        # Get features
-        from ..worker.tasks import get_song_feature
-        
-        features = await get_song_feature(song_id, modality_enum)
-        if not features:
-            raise HTTPException(status_code=404, detail=f"Features not found for song {song_id} / {modality}")
-        
-        # Convert numpy array to list if needed
-        if hasattr(features, 'tolist'):
-            features = features.tolist()
-        
-        return {"song_id": song_id, "modality": modality, "features": features}
-    
-    except Exception as e:
-        logger.error(f"Error getting features: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error retrieving features: {str(e)}")
+async def get_song_features(song_id: str, modality: str):
+    await _song(song_id)
+    vector = milvus.get_embedding(song_id, _modality(modality))
+    if vector is None:
+        raise HTTPException(status_code=404, detail=f"No {modality} features for this song yet")
+    return {"song_id": song_id, "modality": modality, "dimensions": len(vector), "embedding": vector}
+
 
 @app.post("/songs/{song_id}/similar", response_model=SimilarSongsResponse)
-async def find_similar(song_id: str, request: SimilarSongsRequest):
-    """Find similar songs based on a specific modality"""
-    from ..worker.tasks import find_similar_songs
-    
-    # Check if modality is valid
-    try:
-        modality_enum = Modality(request.modality)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid modality: {request.modality}")
-    
-    # Find similar songs
-    similar_songs = await find_similar_songs(song_id, modality_enum, request.top_k)
-    
-    return SimilarSongsResponse(
-        song_id=song_id,
-        similar_songs=similar_songs,
-        modality=request.modality
-    )
-
-if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True) 
+async def find_similar_songs(song_id: str, request: SimilarSongsRequest):
+    await _song(song_id)
+    modality = _modality(request.modality)
+    vector = milvus.get_embedding(song_id, modality)
+    if vector is None:
+        raise HTTPException(status_code=404, detail=f"No {modality.value} features for this song yet")
+    hits = milvus.search_similar(modality, vector, max(1, min(request.top_k, 100)), exclude=song_id)
+    songs = {s.id: s for s in await postgres.get_songs([h[0] for h in hits])}
+    return SimilarSongsResponse(song_id=song_id, modality=modality.value, similar_songs=[
+        SimilarSong(song_id=h[0], title=songs[h[0]].title if h[0] in songs else h[0],
+                    genre=songs[h[0]].genre if h[0] in songs else None, similarity=round(h[1], 4)) for h in hits])

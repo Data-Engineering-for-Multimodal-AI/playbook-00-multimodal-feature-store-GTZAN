@@ -1,60 +1,17 @@
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Virtual Environment
-.env
-.venv
-env/
-venv/
-ENV/
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Project specific
-*.wav
-*.mp3
-*.png
-*.jpg
-*.jpeg
-*.csv
-*.log
 .venv/
-clean_mmfeaturestore/
-images_original/
-genres_original/
-features_*.csv
+venv/
+.pytest_cache/
 
-# Logs
-logs/ 
+# GTZAN (download_data.py) and pipeline output: not part of the repository
+mmfeaturestore/sample_data/genres_original/
+mmfeaturestore/sample_data/images_original/
+mmfeaturestore/.download/
+mmfeaturestore/output/
+*.wav
+
+# Secrets and OS files
+.env
+.DS_Store

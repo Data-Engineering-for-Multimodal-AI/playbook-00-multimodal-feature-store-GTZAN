@@ -1,29 +1,26 @@
 import logging
+
 from ..models.pipeline import Modality
-from .audio import AudioEncoder
-from .image import ImageEncoder
-from .text import TextEncoder
+
 
 class EncoderFactory:
-    """Factory for creating encoders based on modality"""
-    
+    """One encoder per modality, created on first use (the lyrics model loads only if lyrics are processed)."""
+
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         self.encoders = {}
-    
+
     def create_encoder(self, modality: Modality):
-        """Create an encoder for a specific modality"""
         if modality not in self.encoders:
-            if modality == Modality.LYRICS:
-                self.logger.info(f"Creating encoder for {modality.value}")
-                self.encoders[modality] = TextEncoder()
-            elif modality == Modality.AUDIO:
-                self.logger.info(f"Creating encoder for {modality.value}")
+            if modality == Modality.AUDIO:
+                from .audio import AudioEncoder
                 self.encoders[modality] = AudioEncoder()
             elif modality == Modality.IMAGE:
-                self.logger.info(f"Creating encoder for {modality.value}")
+                from .image import ImageEncoder
                 self.encoders[modality] = ImageEncoder()
+            elif modality == Modality.LYRICS:
+                from .text import TextEncoder
+                self.encoders[modality] = TextEncoder()
             else:
                 raise ValueError(f"Unsupported modality: {modality}")
-        
-        return self.encoders[modality] 
+        return self.encoders[modality]

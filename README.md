@@ -1,733 +1,186 @@
-# Multimodal Feature Store
+# Multimodal Feature Store for Music (GTZAN)
 
-A robust feature store for audio and image data that enables efficient extraction, storage, and similarity search across multimodal music data.
+A companion project for *Data Engineering for Multimodal AI* (O'Reilly, 2026). It isn't printed in the book; it is the audio counterpart of the [Chapter 2 playbook](https://github.com/Data-Engineering-for-Multimodal-AI/playbook-02-multimodal-feature-store-streambuy)'s feature store.
+Book: https://oreil.ly/data-engineering-multimodal
 
-## Overview
+> The version before the 2026 update is tagged `first-edition`; see [Differences from the first edition](#differences-from-the-first-edition).
 
-This feature store provides a comprehensive solution for processing and retrieving music data across multiple modalities (audio and image). The system extracts meaningful features from audio files and album artwork, stores them in optimized vector databases, and enables powerful similarity searches to find music with similar acoustic properties or visual aesthetics.
+## What you'll build
 
-### Key Features
+A feature store for music: song metadata in PostgreSQL, one vector per song and modality in Milvus, and a REST API to add songs, extract their features in the background, and find similar songs.
 
-- **Multimodal Feature Extraction**: Extract rich feature vectors from both audio files and images
-- **Vector Similarity Search**: Find songs with similar audio characteristics or visual album art
-- **Asynchronous Processing**: Background job processing for handling large files
-- **REST API Interface**: Simple HTTP endpoints for all operations
-- **Modular Architecture**: Easy to extend with new modalities or encoder models
+- **Audio**: 28 numbers per 30-second clip (MFCCs, chroma, spectral centroid and rolloff, zero-crossing rate), standardized, so no single feature dominates the similarity.
+- **Spectrogram**: the clip's mel spectrogram, as an image, through ResNet-18 pretrained on ImageNet (512 numbers).
+- **Lyrics** (optional): sentence embeddings, for your own songs; GTZAN has no lyrics.
+- **Data**: [GTZAN](https://www.kaggle.com/datasets/andradaolteanu/gtzan-dataset-music-genre-classification), 1,000 clips in 10 genres with their spectrograms, downloaded from Kaggle.
+- **A measured evaluation**: for every song, are its 10 nearest songs in Milvus from the same genre?
 
-## Architecture
+What it shows, measured below:
 
-The feature store uses a modular architecture with several key components:
+- **Each modality on its own finds the genre about 4.4 times as often as chance**, and combining them does better.
+- **Preprocessing decides quality.** The first edition's features did much worse: audio not standardized (precision 0.327) and spectrograms through a network with random weights (0.352). Fixing both: 0.441 and 0.444.
+- **Genres differ.** Classical and metal are easy (0.83 and 0.76); rock, disco and country are mixed up with each other (about 0.25).
 
-- **PostgreSQL**: Stores metadata and job status information
-  - Song metadata (artist, title, etc.)
-  - Data file paths
-  - Processing job status tracking
+## Quick start
 
-- **Milvus**: Vector database for storing and querying high-dimensional feature vectors
-  - Efficient storage of audio and image feature vectors
-  - Fast approximate nearest neighbor search
-  - Separate collections for each modality (audio/image)
+You need Python 3.12 or newer, Docker, and a Kaggle account for the data (an API token in `~/.kaggle/kaggle.json`, or `KAGGLE_USERNAME` and `KAGGLE_KEY`, see `.env.example`).
 
-- **FastAPI**: REST API for interacting with the feature store
-  - Asynchronous request handling
-  - Data validation with Pydantic
-  - Background tasks for long-running operations
-
-- **Encoder Models**: Specialized audio and image encoders that extract features from raw files
-  - Audio: 28-dimensional feature vectors capturing timbre, rhythm, etc.
-  - Image: 512-dimensional feature vectors using CNN-based model
-
-### Data Model
-
-The system uses the following data model:
-
-- **Song**: Core entity representing a music track
-  - Unique ID (UUID)
-  - Metadata (title, artist, album, genre, year)
-  - Data paths for different modalities
-
-- **Job**: Represents a feature extraction process
-  - Unique ID (UUID)
-  - Associated song ID
-  - Status for each modality (pending, processing, processed, error)
-  - Timestamps
-
-- **Feature Vector**: Generated embeddings for each modality
-  - Song ID reference
-  - Modality type (audio/image)
-  - High-dimensional vector data
-
-## Setup & Installation
-
-### System Requirements
-
-- **CPU**: 2+ cores recommended (4+ for faster processing)
-- **RAM**: Minimum 4GB (8GB+ recommended, especially for processing multiple files)
-- **Storage**: 
-  - 500MB for application code
-  - 1GB+ for sample data
-  - Additional space for your music collection
-- **Operating System**: Linux, macOS, or Windows with Docker support
-
-### Prerequisites
-
-- **Python 3.8+**
-- **PostgreSQL 12+**
-- **Docker** (for running Milvus)
-- **Docker Compose** (for managing Milvus services)
-
-### Installation Steps
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/mmfeaturestore.git
-   cd mmfeaturestore
-   ```
-
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. Start the PostgreSQL database:
-   ```bash
-   # Setup PostgreSQL with user "featurestore_user" and database "featurestore"
-   createuser --createdb featurestore_user
-   createdb -O featurestore_user featurestore
-   ```
-
-4. Start the Milvus service:
-   ```bash
-   # Using Docker Compose (recommended)
-   docker-compose up -d
-   ```
-
-   Verify Milvus is running:
-   ```bash
-   # Check container status
-   docker ps | grep milvus
-   
-   # Check Milvus logs for any issues
-   docker logs mmfeaturestore_standalone_1
-   
-   # Test connection to Milvus
-   curl http://localhost:19530/healthz
-   ```
-   
-   If you need to restart Milvus:
-   ```bash
-   docker-compose down
-   docker-compose up -d
-   ```
-
-5. Start the API server:
-   ```bash
-   python run.py
-   ```
-
-## Sample Data
-
-The repository includes sample audio and image files for testing, but these **do not appear in GitHub's web interface** because they are binary files. The sample data is organized as follows:
-
-- **Audio samples**: Located in `/mmfeaturestore/sample_data/genres_original/{genre}/*.wav`
-- **Image samples**: Located in `/mmfeaturestore/sample_data/images_original/{genre}/*.png`
-
-Genres include: pop, rock, jazz, classical, metal, blues, disco, reggae, hiphop, and country.
-
-### Obtaining Sample Data
-
-If the sample data is missing when you clone the repository, you can:
-
-1. Download the GTZAN dataset for audio samples: [GTZAN Genre Collection](http://marsyas.info/downloads/datasets.html)
-2. Place audio files in the appropriate genre folders under `mmfeaturestore/sample_data/genres_original/`
-3. Create or download album artwork images and place them in the corresponding folders under `mmfeaturestore/sample_data/images_original/`
-
-Or contact the repository maintainer for access to the full sample dataset.
-
-## Usage
-
-### REST API Endpoints
-
-- `POST /songs`: Create a new song record
-- `PUT /songs/{song_id}/data/{modality}`: Add data path for a specific modality
-- `POST /songs/{song_id}/process`: Process features for a song
-- `GET /jobs/{job_id}`: Get processing job status
-- `GET /songs/{song_id}/features/{modality}`: Get extracted features for a modality
-- `POST /songs/{song_id}/similar`: Find similar songs based on features
-
-### Example: Processing a New Song
-
-```python
-import requests
-import json
-import uuid
-
-# API base URL
-BASE_URL = "http://localhost:8000"
-
-# Create a new song
-song_id = str(uuid.uuid4())
-song_data = {
-    "id": song_id,
-    "title": "Rock Sample",
-    "artist": "Sample Artist",
-    "album": "Rock Collection",
-    "genre": "rock",
-    "year": 2024
-}
-
-response = requests.post(f"{BASE_URL}/songs", json=song_data)
-print(f"Created song: {response.json()}")
-
-# Set audio and image paths
-audio_path = "/path/to/audio.wav"
-image_path = "/path/to/cover.png"
-
-requests.put(
-    f"{BASE_URL}/songs/{song_id}/data/audio", 
-    json={"path": audio_path}
-)
-requests.put(
-    f"{BASE_URL}/songs/{song_id}/data/image", 
-    json={"path": image_path}
-)
-
-# Process features
-response = requests.post(
-    f"{BASE_URL}/songs/{song_id}/process", 
-    json={"modalities": ["audio", "image"]}
-)
-job_id = response.json()["job_id"]
-
-# Check job status
-response = requests.get(f"{BASE_URL}/jobs/{job_id}")
-print(f"Job status: {response.json()}")
-
-# Find similar songs
-response = requests.post(
-    f"{BASE_URL}/songs/{song_id}/similar",
-    json={"modality": "audio", "top_k": 5}
-)
-print(f"Similar songs: {response.json()}")
-```
-
-## Testing Scripts
-
-The repository includes several test scripts for exploring and validating the feature store functionality:
-
-1. `test_new_song.py`: Tests creating a single song, extracting features, and performing similarity search
-2. `explore_genres.py`: Processes samples from different music genres and compares similarities between them
-3. `test_features.py`: Validates feature extraction for different modalities
-4. `test_similarity.py`: Tests similarity search functionality
-5. `test_api_curl.sh`: Example cURL commands for interacting with the API
-
-## Feature Extraction Process
-
-1. **Audio Features**:
-   - Processes WAV files to extract a 28-dimensional feature vector
-   - Features capture timbral, rhythmic, and harmonic characteristics
-
-2. **Image Features**:
-   - Processes PNG/JPEG album artwork using deep learning models
-   - Extracts a 512-dimensional feature vector capturing visual characteristics
-
-## Troubleshooting
-
-### Known Issues
-
-1. **Milvus Connection**: Ensure Milvus is running before starting the server:
-   ```bash
-   docker ps | grep milvus
-   ```
-   If Milvus isn't running, restart it with:
-   ```bash
-   docker-compose up -d
-   ```
-
-2. **Numpy Serialization Error**: When accessing feature endpoints directly, you may encounter:
-   ```
-   TypeError: 'numpy.float32' object is not iterable
-   ```
-   This is due to serialization issues with raw numpy vectors. Use the `/similar` endpoint instead which properly serializes the results.
-
-3. **Bottleneck Warning**: You may see a warning about the bottleneck library version:
-   ```
-   UserWarning: Pandas requires version '1.3.6' or newer of 'bottleneck' (version '1.3.5' currently installed).
-   ```
-   This is a non-critical warning and can be safely ignored, or you can update bottleneck with:
-   ```bash
-   pip install --upgrade bottleneck
-   ```
-
-4. **Port Already In Use**: If you see an error like:
-   ```
-   [Errno 48] error while attempting to bind on address ('0.0.0.0', 8000): address already in use
-   ```
-   Kill the existing process using port 8000:
-   ```bash
-   lsof -i :8000
-   kill <PID>
-   ```
-
-### 1. Milvus Connection Issues
-
-If you see:
-```
-ERROR: Failed to connect to Milvus: <MilvusException: (code=2, message=Fail connecting to server on localhost:19530)>
-WARNING: Failed to connect to Milvus, vector operations will be disabled
-```
-
-**Solution:**
-
-First verify Milvus is running:
 ```bash
-# Check if Milvus containers are running
-docker ps | grep milvus
+git clone https://github.com/Data-Engineering-for-Multimodal-AI/playbook-00-multimodal-feature-store-GTZAN.git
+cd playbook-00-multimodal-feature-store-GTZAN
+
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+
+cd mmfeaturestore
+docker compose up -d --wait            # PostgreSQL (127.0.0.1:5433) and Milvus 3.0.3 (127.0.0.1:19530)
+python download_data.py                # GTZAN from Kaggle, 1.2 GB, into sample_data/
+python ingest_gtzan.py                 # all songs and their features (about 3 minutes)
+python evaluate.py --first-edition     # how well the features find the genre
 ```
 
-If containers are not running:
+With [uv](https://docs.astral.sh/uv/): `cd mmfeaturestore && uv sync`, then prefix commands with `uv run`. From the repository root, the Makefile has `make services`, `make data`, `make ingest`, `make evaluate`, `make api` and `make smoke`. `docker compose down` stops the services (`down -v` also deletes their data).
+
+### The API
+
 ```bash
-# Start Milvus and related services
-docker-compose up -d
+python run.py                          # http://127.0.0.1:8000/docs
+python test_new_song.py                # add rock.00000 through the API and extract its features
+python test_similarity.py --song classical.00003
+python explore_genres.py
+./test_api_curl.sh                     # the same with curl
 ```
 
-If containers are running but you still can't connect:
-```bash
-# Check Milvus logs for errors
-docker logs mmfeaturestore_standalone_1
+| Endpoint | What it does |
+|---|---|
+| `POST /songs` | create or update a song (`id`, `title`, `artist`, `genre`, ...) |
+| `PUT /songs/{id}/data/{modality}` | the file for `audio`, `image` or `lyrics`; it must be inside `sample_data/` (or `FEATURESTORE_DATA`) |
+| `POST /songs/{id}/process` | extract the features in the background; returns a job |
+| `GET /jobs/{job_id}` | the job's status per modality (kept in PostgreSQL) |
+| `GET /songs/{id}/features/{modality}` | the stored vector |
+| `POST /songs/{id}/similar` | `{"modality": "audio", "top_k": 10}`: the most similar songs, not counting itself |
+| `GET /genres` | songs per genre |
 
-# Restart Milvus containers
-docker-compose restart
+## Tested on
 
-# If problems persist, recreate the containers
-docker-compose down
-docker-compose up -d
+| Date | OS | Python | What |
+|---|---|---|---|
+| 2026-10-27 | macOS 26.5.1 (Apple M3, 8 GB) | 3.13.16 | `make smoke` (4 tests); GTZAN downloaded, ingested and evaluated; the API and its scripts (output below) |
+| 2026-10-27 | macOS 26.5.1 (Apple M3) | 3.12.15 | Fresh clone: `pip install -r requirements.txt` (77 s), the services, the tests |
+| 2026-10-27 | Ubuntu (GitHub Actions) | 3.12, 3.13 | The tests with PostgreSQL and Milvus in Docker; `pip install -r requirements.txt` and the API. CI uses synthetic clips: GTZAN can't be redistributed |
+
+Versions are pinned in `mmfeaturestore/uv.lock` and `mmfeaturestore/requirements.txt` (pymilvus 3.0, Milvus 3.0.3, PostgreSQL 17, librosa 0.11, torch 2.14 (CPU build on Linux), FastAPI).
+
+## Differences from the first edition
+
+| First edition | Now | Why |
+|---|---|---|
+| Image features from ResNet-18 with random weights (`weights=None`) | ImageNet-pretrained weights | Random weights encode noise; measured: precision 0.352 → 0.444 |
+| Audio features L2-normalized as they were | Standardized first (`models/audio_scaler.json`), then normalized | Spectral centroid and rolloff (thousands of Hz) outweighed the other 26 features; 0.327 → 0.442 |
+| The README called the images album artwork | They are GTZAN's mel spectrograms (Kaggle version) | Accuracy |
+| The README said sample audio and images were in the repository; its download link (marsyas.info) no longer answers | `download_data.py` downloads GTZAN from Kaggle and checks every file | Nothing was committed; the audio can't be redistributed |
+| 102 MB of database files from one local run committed (`mmfeaturestore/volumes/`) | Docker volumes | Generated state, not source; the pipeline rebuilds it |
+| `docker-compose.yml`: Milvus 2.3.3, MinIO's own image, no PostgreSQL; ports on every interface | PostgreSQL 17, Milvus 3.0.3 (Milvus's own compose setup), on 127.0.0.1 | The API needs PostgreSQL; MinIO stopped publishing its image |
+| pymilvus ORM API (`connections`, `Collection`) | pymilvus `MilvusClient` | The ORM API is deprecated |
+| Each job opened its own database connections; `datetime.now()` fixed at import | Shared connections; timestamps per object | |
+| Searches returned the song itself as its own best match | Left out | |
+| `librosa`'s zero-crossing rate | The same computation in NumPy | librosa's numba code crashed the process on macOS with PyTorch loaded, as in the worker |
+| Scripts with absolute paths from one machine; `batch_process.py`, `run_test.py` and six manual test scripts | `ingest_gtzan.py`, `evaluate.py`, pytest; the README's scripts (`test_new_song.py`, `test_similarity.py`, `explore_genres.py`, `test_api_curl.sh`) work | |
+| A `data` submodule link with no `.gitmodules`, an empty `new_data/`, a second `docker-compose.yml` | Removed | |
+| API on 0.0.0.0; any file path accepted | 127.0.0.1; paths inside the data folder only | |
+| Python 3.8+, unpinned; clone URL `yourusername/mmfeaturestore` | Python 3.12+, pinned; this repository | |
+
+Full list: [CHANGELOG.md](CHANGELOG.md).
+
+## Data and licenses
+
+| Data | Source | License |
+|---|---|---|
+| GTZAN clips (`sample_data/genres_original/`, downloaded, not in the repository): 1,000 × 30 s, 10 genres | G. Tzanetakis and P. Cook, "Musical genre classification of audio signals", IEEE Transactions on Speech and Audio Processing, 2002. Kaggle mirror: [andradaolteanu/gtzan-dataset-music-genre-classification](https://www.kaggle.com/datasets/andradaolteanu/gtzan-dataset-music-genre-classification) | Kaggle lists "Other". The clips come from commercial recordings; GTZAN is used for research and isn't redistributed here. `jazz.00054.wav` is unreadable |
+| Spectrograms (`sample_data/images_original/`, downloaded): 999 mel spectrograms | The same Kaggle dataset | As above |
+| `models/audio_scaler.json`: the 28 features' means and standard deviations over the 999 readable clips | Computed by `ingest_gtzan.py --fit-scaler` | Statistics only; no audio |
+| ResNet-18 ImageNet weights (downloaded on first use) | torchvision | BSD-3-Clause (torchvision); trained on ImageNet |
+
+Known issues with GTZAN (B. Sturm, 2013): repeated clips, mislabellings and several clips from the same artist in a genre. They make the genre scores here somewhat optimistic.
+
+## Expected output
+
+On 2026-10-27, macOS 26.5.1 (Apple M3, 8 GB), Python 3.13.16, with the services in Docker. This is the output of this version.
+
+`python ingest_gtzan.py --reset`:
+
+```
+1000 clips in 10 genres (999 with a spectrogram)
+  PostgreSQL: 1000 songs (1.3 s)
+  Audio: 999 clips, 28 features each (128 s, 0.13 s per clip); unreadable: jazz.00054 (LibsndfileError)
+  Spectrograms: 999 images, 512 features each (31 s, 0.03 s per image)
+  Milvus song_audio: 999 vectors
+  Milvus song_image: 999 vectors
 ```
 
-Common issues:
-- Docker not running
-- Port 19530 is in use by another application
-- Insufficient memory for Milvus (check Docker resource limits)
-- Corrupted Milvus data (check logs for any data errors)
+`python evaluate.py --first-edition`. P@10: the share of a song's 10 nearest songs in its genre; 10-NN acc: the majority genre of those 10 is right.
 
-## Dependencies
+```
+Features                                         Songs   P@10  10-NN acc
+audio (Milvus search)                              999  0.441      0.562
+spectrogram (Milvus search)                        999  0.444      0.609
+audio + spectrogram (combined)                     999  0.483      0.603
+first edition: audio without standardizing         999  0.327      0.425
+first edition: spectrogram, untrained ResNet-18    999  0.352      0.506
+chance                                                  0.099      0.100
 
-- `fastapi`: Web framework for the API
-- `pymilvus`: Client for Milvus vector database
-- `asyncpg`: Async PostgreSQL client
-- `numpy`: Numerical computing
-- `librosa`: Audio processing
-- `torchvision`: Image processing
-- `pandas`: Data manipulation
-- `pydantic`: Data validation
-- `uvicorn`: ASGI server
+Milvus search: median 3.19 ms, p95 7.22 ms (1998 searches, top 10, HNSW)
+Precision@10 per genre (combined): classical 0.83, metal 0.76, pop 0.67, jazz 0.53, blues 0.50, hiphop 0.44, reggae 0.32, country 0.28, disco 0.26, rock 0.25
+```
+
+`python test_new_song.py` (with `python run.py` running):
+
+```
+Created song rock.00000 (rock)
+  audio path: sample_data/genres_original/rock/rock.00000.wav
+  image path: sample_data/images_original/rock/rock00000.png
+Processing job cab5efc6-21c7-4e38-9afd-452f0f7c08e8
+  status: {'audio': 'processed', 'image': 'processed'}
+  audio features: 28 numbers, first three [0.079, 0.088, -0.186]
+  image features: 512 numbers, first three [0.079, 0.001, 0.051]
+```
+
+`python test_similarity.py --song classical.00003 --top 5`:
+
+```
+Most similar to classical.00003 by audio (4 of 5 in the same genre):
+  classical.00029  classical  similarity 0.855
+  classical.00013  classical  similarity 0.846
+  classical.00010  classical  similarity 0.834
+  classical.00073  classical  similarity 0.820
+  jazz.00007       jazz       similarity 0.810
+Most similar to classical.00003 by spectrogram (5 of 5 in the same genre):
+  classical.00026  classical  similarity 0.947
+  classical.00075  classical  similarity 0.946
+  classical.00009  classical  similarity 0.945
+  classical.00023  classical  similarity 0.943
+  classical.00013  classical  similarity 0.941
+```
+
+`python explore_genres.py`:
+
+```
+Songs per genre: blues 100, classical 100, country 100, disco 100, hiphop 100, jazz 100, metal 100, pop 100, reggae 100, rock 100
+
+Nearest 5 songs by audio, for the first clip of each genre:
+  blues.00000      -> country 2, rock 1, reggae 1, blues 1
+  classical.00000  -> classical 4, jazz 1
+  country.00000    -> pop 3, country 1, disco 1
+  disco.00000      -> hiphop 3, reggae 2
+  hiphop.00000     -> metal 3, disco 1, rock 1
+  jazz.00000       -> classical 4, jazz 1
+  metal.00000      -> hiphop 2, pop 1, reggae 1, metal 1
+  pop.00000        -> pop 4, disco 1
+  reggae.00000     -> disco 2, blues 1, jazz 1, country 1
+  rock.00000       -> country 2, rock 2, metal 1
+```
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-The MIT License is a permissive license that allows for reuse with few restrictions. You are free to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the software, provided that the original copyright notice and permission notice appear in all copies.
-
-## What to Expect When Running
-
-### Starting the Server
-
-When running `python run.py` to start the server, you should see:
-
-```
-INFO: NumExpr defaulting to 8 threads.
-INFO: Started server process [XXXXX]
-INFO: Waiting for application startup.
-INFO: Connected to PostgreSQL at localhost:5432/featurestore
-INFO: Created tables if they didn't exist
-INFO: Connected to Milvus at localhost:19530
-INFO: Connected to Milvus
-INFO: Application startup complete.
-INFO: Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-```
-
-If Milvus is not running, you'll see an error like:
-```
-ERROR: Failed to connect to Milvus: <MilvusException: (code=2, message=Fail connecting to server on localhost:19530)>
-```
-
-### Creating and Processing a Song
-
-When creating and processing a song through the API, expect:
-
-1. **Creating a song**: Returns a JSON response with the song ID
-2. **Setting data paths**: Returns a confirmation message
-3. **Processing features**: Returns a job ID for tracking
-4. **Job status polling**: Shows progression from "pending" to "processing" to "processed" for each modality
-5. **Similarity search**: Returns a list of similar songs with IDs and similarity scores
-
-If you run the included `test_new_song.py` script, you'll see output like:
-```
-INFO: Created song: 7f218e3d-cb99-4fb4-b9ea-d0ff85c18ace
-INFO: Updated data path for song 7f218e3d-cb99-4fb4-b9ea-d0ff85c18ace / audio
-INFO: Updated data path for song 7f218e3d-cb99-4fb4-b9ea-d0ff85c18ace / image
-INFO: Created job: 991240fa-3b3e-42a8-bdf2-5ec80add9732
-INFO: Generated audio features with shape: (28,)
-INFO: Inserted embedding for song in modality audio
-INFO: Generated image features with shape: (512,)
-INFO: Inserted embedding for song in modality image
-```
-
-### Common Error Patterns
-
-1. **Milvus not running**:
-   ```
-   WARNING: Failed to connect to Milvus, vector operations will be disabled
-   WARNING: Milvus not connected, skipping feature storage for audio
-   ```
-   Fix by starting the Milvus server.
-
-2. **Feature retrieval errors**:
-   Direct feature access may show errors due to numpy serialization issues:
-   ```
-   TypeError: 'numpy.float32' object is not iterable
-   ```
-   This is why the `/similar` endpoint should be used instead of direct feature access.
-
-3. **Port conflicts**:
-   ```
-   ERROR: [Errno 48] error while attempting to bind on address ('0.0.0.0', 8000): address already in use
-   ```
-   Fix by killing other processes using port 8000.
-
-## Step-by-Step Implementation Guide
-
-Follow this guide to set up and use the feature store with the included sample data.
-
-### 1. Setting Up The Environment
-
-First, ensure all dependencies are installed:
-
-```bash
-pip install -r requirements.txt
-```
-
-Expected output:
-```
-Successfully installed pymilvus-2.3.1 fastapi-0.103.1 uvicorn-0.23.2 asyncpg-0.28.0 librosa-0.10.1 torchvision-0.16.0 ...
-```
-
-### 2. Starting the PostgreSQL Database
-
-Ensure PostgreSQL is running and create the necessary database:
-
-```bash
-createuser --createdb featurestore_user
-createdb -O featurestore_user featurestore
-```
-
-Expected output:
-No output if successful.
-
-### 3. Starting Milvus with Docker
-
-Start the Milvus vector database:
-
-```bash
-docker-compose up -d
-```
-
-Expected output:
-```
-Creating network "mmfeaturestore_default" with the default driver
-Creating mmfeaturestore_etcd_1         ... done
-Creating mmfeaturestore_minio_1        ... done
-Creating mmfeaturestore_standalone_1   ... done
-```
-
-Verify Milvus is running:
-```bash
-docker ps | grep milvus
-```
-
-Expected output:
-```
-d6f3e0a9e0b2   milvusdb/milvus:v2.3.1   "/tini -- milvus run…"   2 hours ago    Up 2 hours    0.0.0.0:19530->19530/tcp, 0.0.0.0:9091->9091/tcp   mmfeaturestore_standalone_1
-```
-
-### 4. Starting the API Server
-
-Start the FastAPI server:
-
-```bash
-cd mmfeaturestore
-python run.py
-```
-
-Expected output:
-```
-INFO: NumExpr defaulting to 8 threads.
-INFO: Started server process [58006]
-INFO: Waiting for application startup.
-INFO: Connected to PostgreSQL at localhost:5432/featurestore
-INFO: Created tables if they didn't exist
-INFO: Connected to Milvus at localhost:19530
-INFO: Connected to Milvus
-INFO: Application startup complete.
-INFO: Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-```
-
-### 5. Processing Sample Data
-
-Run the sample processing script:
-
-```bash
-python test_new_song.py
-```
-
-This script processes a rock sample from the sample data. You'll see output like:
-
-```
-INFO: NumExpr defaulting to 8 threads.
-INFO: Connected to PostgreSQL at localhost:5432/featurestore
-INFO: Using song ID: 610cd810-735b-4996-a94e-f5ed65ea1738
-INFO: Updated audio path: mmfeaturestore/sample_data/genres_original/rock/rock.00000.wav
-INFO: Updated image path: mmfeaturestore/sample_data/images_original/rock/rock00000.png
-INFO: Processing features for audio and image
-INFO: Generated audio features with shape: (28,)
-INFO: Inserted embedding for audio in Milvus
-INFO: Generated image features with shape: (512,)
-INFO: Inserted embedding for image in Milvus
-INFO: Processing complete
-```
-
-### 6. Testing Similarity Search
-
-After processing some samples, you can test similarity search:
-
-```bash
-python test_similarity.py
-```
-
-Expected output:
-```
-INFO: Finding similar songs to Rock Sample 00000 by audio...
-INFO: Found 3 similar songs:
-1. Test Rock Song API (Score: 0.82)
-2. Rock Sample 00000 (Score: 0.78)
-3. Pop Sample 00032 (Score: 0.65)
-
-INFO: Finding similar songs to Rock Sample 00000 by image...
-INFO: Found 2 similar songs:
-1. Pop Sample 00032 (Score: 0.71)
-2. Direct Test Song (Score: 0.68)
-```
-
-### 7. Exploring Multiple Genres
-
-To compare similarities across music genres:
-
-```bash
-python explore_genres.py
-```
-
-This will process sample files from each available genre and compare their similarities. Expected output:
-
-```
-INFO: Found 10 genres: ['pop', 'rock', 'jazz', 'classical', 'metal', 'blues', 'disco', 'reggae', 'hiphop', 'country']
-INFO: Processing pop sample...
-INFO: Generated audio features with shape: (28,)
-INFO: Generated image features with shape: (512,)
-INFO: Processing rock sample...
-INFO: Generated audio features with shape: (28,)
-INFO: Generated image features with shape: (512,)
-...
-INFO: Processing country sample...
-INFO: Finding audio similarities between genres...
-INFO: Pop and Rock similarity: 0.65
-INFO: Pop and Jazz similarity: 0.47
-...
-INFO: Finding image similarities between genres...
-INFO: Pop and Rock similarity: 0.72
-INFO: Pop and Jazz similarity: 0.53
-...
-```
-
-### 8. Using the API Directly
-
-You can also interact with the API directly using curl or other HTTP clients:
-
-```bash
-# Check server health
-curl http://localhost:8000/health
-# Expected: {"status":"ok"}
-
-# Register a sample
-curl -X POST http://localhost:8000/songs \
-  -H "Content-Type: application/json" \
-  -d '{"id":"sample123", "title":"Rock Sample", "artist":"Sample Artist", "album":"Rock Collection", "genre":"rock", "year":2024}'
-# Expected: {"id":"sample123","title":"Rock Sample","artist":"Sample Artist","album":"Rock Collection","genre":"rock","year":2024}
-
-# Set data paths
-curl -X PUT http://localhost:8000/songs/sample123/data/audio \
-  -H "Content-Type: application/json" \
-  -d '{"path":"sample_data/genres_original/rock/rock.00000.wav"}'
-# Expected: {"message":"Updated data path for song sample123 / audio"}
-
-curl -X PUT http://localhost:8000/songs/sample123/data/image \
-  -H "Content-Type: application/json" \
-  -d '{"path":"sample_data/images_original/rock/rock00000.png"}'
-# Expected: {"message":"Updated data path for song sample123 / image"}
-
-# Process features
-curl -X POST http://localhost:8000/songs/sample123/process \
-  -H "Content-Type: application/json" \
-  -d '{"modalities":["audio","image"]}'
-# Expected: {"job_id":"991240fa-3b3e-42a8-bdf2-5ec80add9732"}
-
-# Check job status
-curl http://localhost:8000/jobs/991240fa-3b3e-42a8-bdf2-5ec80add9732
-# Expected: {"id":"991240fa-3b3e-42a8-bdf2-5ec80add9732","status":{"audio":"processed","image":"processed"}}
-
-# Find similar songs
-curl -X POST http://localhost:8000/songs/sample123/similar \
-  -H "Content-Type: application/json" \
-  -d '{"modality":"audio","top_k":3}'
-# Expected: {"similar":[{"id":"4f512e5a-...","score":0.82},{"id":"7f218e3d-...","score":0.78},{"id":"3a71b2c9-...","score":0.65}]}
-```
-
-## Common Issues and Troubleshooting
-
-### 1. Milvus Connection Issues
-
-If you see:
-```
-ERROR: Failed to connect to Milvus: <MilvusException: (code=2, message=Fail connecting to server on localhost:19530)>
-WARNING: Failed to connect to Milvus, vector operations will be disabled
-```
-
-**Solution:**
-
-First verify Milvus is running:
-```bash
-# Check if Milvus containers are running
-docker ps | grep milvus
-```
-
-If containers are not running:
-```bash
-# Start Milvus and related services
-docker-compose up -d
-```
-
-If containers are running but you still can't connect:
-```bash
-# Check Milvus logs for errors
-docker logs mmfeaturestore_standalone_1
-
-# Restart Milvus containers
-docker-compose restart
-
-# If problems persist, recreate the containers
-docker-compose down
-docker-compose up -d
-```
-
-Common issues:
-- Docker not running
-- Port 19530 is in use by another application
-- Insufficient memory for Milvus (check Docker resource limits)
-- Corrupted Milvus data (check logs for any data errors)
-
-### 2. Port Already in Use
-
-If you see:
-```
-ERROR: [Errno 48] error while attempting to bind on address ('0.0.0.0', 8000): address already in use
-```
-
-**Solution:**
-```bash
-# Find process using port 8000
-lsof -i :8000
-
-# Kill the process
-kill <PID>
-```
-
-### 3. Feature Retrieval Errors
-
-If you see:
-```
-ValueError: [TypeError("'numpy.float32' object is not iterable"), TypeError('vars() argument must have __dict__ attribute')]
-```
-
-**Solution:** This is a known issue with direct feature retrieval. Use the `/similar` endpoint instead, which properly handles the serialization:
-
-```bash
-# Instead of:
-# curl http://localhost:8000/songs/{song_id}/features/{modality}
-
-# Use:
-curl -X POST http://localhost:8000/songs/{song_id}/similar \
-  -H "Content-Type: application/json" \
-  -d '{"modality":"audio","top_k":3}'
-```
-
-## Project Structure
-
-The repository is organized as follows:
-
-```
-mmfeaturestore/
-├── docker-compose.yml            # Docker configuration for Milvus
-├── requirements.txt              # Python dependencies
-├── run.py                        # Entry point to start the API server
-├── test_new_song.py              # Basic test script
-├── explore_genres.py             # Script to compare different genres
-├── test_similarity.py            # Script to test similarity search
-├── src/                          # Source code
-│   ├── api/                      # API endpoints and route handlers
-│   │   ├── main.py               # FastAPI application and routes
-│   │   ├── models.py             # Pydantic models for requests/responses
-│   │   └── endpoints/            # Endpoint implementations
-│   ├── db/                       # Database connections and operations
-│   │   ├── postgres.py           # PostgreSQL client
-│   │   └── milvus.py             # Milvus client
-│   ├── encoders/                 # Feature extraction modules
-│   │   ├── audio.py              # Audio feature extraction
-│   │   ├── image.py              # Image feature extraction
-│   │   └── factory.py            # Encoder factory
-│   └── worker/                   # Background job processing
-│       └── tasks.py              # Async feature extraction tasks
-└── sample_data/                  # Sample audio and image files
-    ├── genres_original/          # Audio samples organized by genre
-    └── images_original/          # Image samples organized by genre
-```
-
-### Key Components
-
-- **API Layer**: Handles HTTP requests and responses (FastAPI)
-- **Database Layer**: Manages data persistence (PostgreSQL and Milvus)
-- **Encoder Layer**: Extracts features from raw files (Audio/Image processors)
-- **Worker Layer**: Handles background processing of extraction tasks
-
-## Contributing
-
-Contributions to improve the feature store are welcome! Here's how you can contribute:
-
-1. **Fork the repository**
-2. **Create a feature branch** (`git checkout -b feature/amazing-feature`)
-3. **Commit your changes** (`git commit -m 'Add some amazing feature'`)
-4. **Push to the branch** (`git push origin feature/amazing-feature`)
-5. **Open a Pull Request**
-
-Before submitting a pull request, please:
-- Ensure tests are passing
-- Add documentation for new features
-- Follow the existing code style
-
-### Development Setup
-
-For development, it's recommended to:
-1. Create a virtual environment
-2. Install dependencies with `pip install -r requirements.txt`
-3. Install development dependencies with `pip install -r requirements-dev.txt` (if available)
-4. Run tests before submitting changes
-
-
+MIT; see [LICENSE](LICENSE). GTZAN is not part of the repository; see [Data and licenses](#data-and-licenses).

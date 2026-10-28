@@ -1,0 +1,43 @@
+name: smoke
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    # Synthetic clips and images (GTZAN can't be redistributed, so CI doesn't download it)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    defaults:
+      run:
+        working-directory: mmfeaturestore
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
+      - name: Cache the ResNet-18 weights
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/torch
+          key: torch-resnet18
+      - name: Start PostgreSQL and Milvus
+        run: docker compose up -d --wait
+      - name: Tests
+        run: uv run pytest -q tests
+      - name: pip install -r requirements.txt, then the API and its scripts
+        run: |
+          uv venv --seed --python ${{ matrix.python-version }} /tmp/pipenv
+          /tmp/pipenv/bin/python -m pip install -q -r ../requirements.txt
+          /tmp/pipenv/bin/python download_data.py --help > /dev/null
+          /tmp/pipenv/bin/python run.py > /tmp/api.log 2>&1 &
+          for i in $(seq 1 90); do curl -sf http://127.0.0.1:8000/health && break; sleep 1; done
+          curl -sf http://127.0.0.1:8000/genres
+      - name: API log
+        if: failure()
+        run: cat /tmp/api.log || true

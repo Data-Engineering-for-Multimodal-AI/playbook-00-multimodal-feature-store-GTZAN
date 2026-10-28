@@ -1,20 +1,2 @@
-# Framework and API
-fastapi>=0.115.0
-uvicorn>=0.34.0
-pydantic>=2.5.2
-
-# Database
-asyncpg>=0.30.0
-pymilvus>=2.5.0
-
-# Machine learning and data processing
-numpy>=1.26.0
-librosa>=0.10.1
-torch>=2.3.0
-torchvision>=0.16.0
-sentence-transformers>=4.0.0
-pillow>=10.2.0
-
-# Utilities
-python-dotenv>=1.0.0
-tqdm>=4.66.0 
+# The pinned requirements are in mmfeaturestore/requirements.txt (generated from mmfeaturestore/uv.lock).
+-r mmfeaturestore/requirements.txt
