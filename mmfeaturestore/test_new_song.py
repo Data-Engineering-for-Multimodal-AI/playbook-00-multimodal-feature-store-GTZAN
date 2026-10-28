@@ -1,93 +1,50 @@
-#!/usr/bin/env python
-import asyncio
-import os
-import logging
-import uuid
-from src.db.postgres import PostgresClient
-from src.db.milvus import MilvusClient
-from src.models.pipeline import Modality, Song
-from src.worker.tasks import process_song_features, find_similar_songs
+#!/usr/bin/env python3
+"""Add one song through the API and extract its features (python run.py must be running).
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-logger = logging.getLogger(__name__)
+    python test_new_song.py                       # rock.00000
+    python test_new_song.py --song jazz.00012
+"""
+import argparse
+import sys
+import time
 
-async def main():
-    # Define sample data paths
-    audio_path = "mmfeaturestore/sample_data/genres_original/rock/rock.00000.wav"
-    image_path = "mmfeaturestore/sample_data/images_original/rock/rock00000.png"
-    
-    # Initialize database clients
-    postgres_client = PostgresClient(
-        user="featurestore_user",
-        password="",  # No password for local development
-        database="featurestore"
-    )
-    
-    await postgres_client.connect()
-    
+import requests
+
+API = "http://127.0.0.1:8000"
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--song", default="rock.00000", help="a GTZAN clip, e.g. rock.00000")
+    parser.add_argument("--api", default=API)
+    args = parser.parse_args()
+    genre, number = args.song.split(".")
     try:
-        # Create a unique song ID
-        song_id = str(uuid.uuid4())
-        
-        # Create song record
-        song = Song(
-            id=song_id,
-            title="Rock Sample 00000",
-            artist="Sample Artist",
-            album="Rock Collection",
-            genre="rock",
-            year=2024
-        )
-        
-        # Insert into database
-        await postgres_client.create_song(song)
-        logger.info(f"Created song: {song_id} - {song.title}")
-        
-        # Set data paths
-        await postgres_client.update_song_data_path(song_id, Modality.AUDIO, audio_path)
-        logger.info(f"Added audio path: {audio_path}")
-        
-        await postgres_client.update_song_data_path(song_id, Modality.IMAGE, image_path)
-        logger.info(f"Added image path: {image_path}")
-        
-        # Process features for both modalities
-        modalities = [Modality.AUDIO, Modality.IMAGE]
-        logger.info(f"Processing features for modalities: {modalities}")
-        job = await process_song_features(song_id, modalities)
-        logger.info(f"Processed features: {job.status}")
-        
-        # Test similarity search - audio
-        logger.info("Testing audio similarity search...")
-        similar_songs_audio = await find_similar_songs(song_id, Modality.AUDIO, top_k=3)
-        
-        if similar_songs_audio:
-            logger.info(f"Found {len(similar_songs_audio)} similar songs by audio:")
-            for i, similar_song_id in enumerate(similar_songs_audio, 1):
-                similar_song = await postgres_client.get_song(similar_song_id)
-                if similar_song:
-                    logger.info(f"  {i}. {similar_song.title}")
-        else:
-            logger.info("No similar songs found for audio")
-        
-        # Test similarity search - image
-        logger.info("Testing image similarity search...")
-        similar_songs_image = await find_similar_songs(song_id, Modality.IMAGE, top_k=3)
-        
-        if similar_songs_image:
-            logger.info(f"Found {len(similar_songs_image)} similar songs by image:")
-            for i, similar_song_id in enumerate(similar_songs_image, 1):
-                similar_song = await postgres_client.get_song(similar_song_id)
-                if similar_song:
-                    logger.info(f"  {i}. {similar_song.title}")
-        else:
-            logger.info("No similar songs found for image")
-            
-    finally:
-        await postgres_client.disconnect()
+        requests.get(f"{args.api}/health", timeout=5).raise_for_status()
+    except requests.RequestException:
+        sys.exit(f"The API isn't running at {args.api}: python run.py")
+
+    song = requests.post(f"{args.api}/songs", json={"id": args.song, "title": args.song, "genre": genre}).json()
+    print(f"Created song {song['id']} ({song['genre']})")
+    for modality, path in (("audio", f"sample_data/genres_original/{genre}/{args.song}.wav"),
+                           ("image", f"sample_data/images_original/{genre}/{genre}{number}.png")):
+        r = requests.put(f"{args.api}/songs/{args.song}/data/{modality}", json={"path": path})
+        print(f"  {modality} path: {path}" if r.ok else f"  {modality}: {r.json()['detail']}")
+    job = requests.post(f"{args.api}/songs/{args.song}/process", json={"modalities": ["audio", "image"]}).json()
+    print(f"Processing job {job['job_id']}")
+    for _ in range(120):
+        status = requests.get(f"{args.api}/jobs/{job['job_id']}").json()
+        if all(s in ("processed", "failed") for s in status["status"].values()):
+            break
+        time.sleep(0.5)
+    print(f"  status: {status['status']}" + (f" ({status['error_message']})" if status.get("error_message") else ""))
+    for modality in ("audio", "image"):
+        r = requests.get(f"{args.api}/songs/{args.song}/features/{modality}")
+        if r.ok:
+            v = r.json()["embedding"]
+            print(f"  {modality} features: {len(v)} numbers, first three {[round(x, 3) for x in v[:3]]}")
+    return 0 if all(s == "processed" for s in status["status"].values()) else 1
+
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    sys.exit(main())
