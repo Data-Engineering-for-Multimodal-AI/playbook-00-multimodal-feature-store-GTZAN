@@ -5,6 +5,16 @@
 Not printed in the book. Nothing the book shows has changed.
 
 ### Added
+- `make similar FILE=...` (`scripts/similar.py`): the stored songs most like a WAV file or an image.
+- `make check-data DIR=...` and `make load DIR=...` (`scripts/own_data.py`): check a folder of your
+  own clips in the GTZAN layout, then store and search them. Tests in `tests/test_own_data.py`;
+  `make smoke` runs `tests/test_smoke.py` as before.
+- Three measured experiments on synthetic clips, no Docker: `make try-scaler`, `make try-image-crop`,
+  `make try-noise` (`experiments/`).
+- README: Run it, time tiers, Try this, Use your own data, What you end up with, Before production,
+  What it costs; the project structure lists the new folders.
+- CI: the Run it steps with checks on their output, the own-data checks, the three experiments, and
+  the time to first output in the devcontainer job.
 - `make setup`, `make run`, `make serve`, `make smoke`, `make data` and `make clean`. `make run` starts
   PostgreSQL and Milvus, stores audio and image features for 12 synthetic clips, and prints the most
   similar songs per genre. It needs no Kaggle account. `make data` downloads GTZAN from Kaggle
@@ -30,6 +40,8 @@ Not printed in the book. Nothing the book shows has changed.
 - The GTZAN link (marsyas.info) no longer answers. The READMEs link to the Kaggle page.
 
 ### Changed
+- README: "Overview" is now "How it works"; "Setup & Installation" is now "Run it the way the book
+  does", with the same content.
 - README opening: a title that says what you'll do, three sentences on why, the example and what you'll do, then the data engineering problem and what you'll work with.
 - `mmfeaturestore/docker-compose.yml` is the one compose file. The root `docker-compose.yml` includes
   it, so `docker-compose up -d` starts the same containers from either folder. Milvus 3.0.3 (was

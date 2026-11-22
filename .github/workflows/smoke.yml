@@ -24,6 +24,29 @@ jobs:
         run: make smoke
       - name: One-command run
         run: make run
+      # README "Run it", steps 2 and 3, as written
+      - name: Run it, steps 2 and 3
+        run: |
+          make run | tee /tmp/run.txt
+          grep -q "Stored features for 12 songs in PostgreSQL and Milvus" /tmp/run.txt
+          grep -q "Same genre as the query: 9 of 9" /tmp/run.txt
+          make similar FILE=mmfeaturestore/output/synthetic/genres_original/synthetic_bass/synthetic_bass.00000.wav | tee /tmp/similar.txt
+          grep -qE "^  1.0000  synthetic_bass.00000$" /tmp/similar.txt
+      - name: Use your own data
+        run: |
+          uv run --frozen pytest -q tests/test_own_data.py
+          make check-data DIR=mmfeaturestore/output/synthetic | tee /tmp/check.txt
+          grep -q "OK, 12 clips in 3 genres, 12 with an image" /tmp/check.txt
+          make load DIR=mmfeaturestore/output/synthetic | tee /tmp/load.txt
+          grep -q "Stored features for 12 songs" /tmp/load.txt
+      - name: Try this 1 to 3
+        run: |
+          make try-scaler | tee /tmp/try1.txt
+          grep -qE "^raw +100% +1.000 +0.990 +0.010 +276 of 276$" /tmp/try1.txt
+          make try-image-crop | tee /tmp/try2.txt
+          grep -qE "^first and last 20% of the time +40% +1.0000$" /tmp/try2.txt
+          make try-noise | tee /tmp/try3.txt
+          grep -qE "^ +clean +100% " /tmp/try3.txt
       - name: Printed install path (pip install -r requirements.txt, docker-compose up -d, python run.py)
         env:
           PIP_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu   # CPU-only PyTorch on the runner
@@ -51,4 +74,4 @@ jobs:
         uses: devcontainers/ci@v0.3
         with:
           push: never
-          runCmd: make run
+          runCmd: start=$(date +%s) && make run && echo "Time to first output in a clean devcontainer was $(( $(date +%s) - start )) s"

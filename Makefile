@@ -1,4 +1,4 @@
-.PHONY: setup run run-gtzan serve smoke data clean
+.PHONY: setup run run-gtzan serve similar check-data load try-scaler try-image-crop try-noise smoke data clean
 
 # Uniform targets for The Playbooks. The README's commands (pip install -r requirements.txt,
 # docker-compose up -d, python run.py) still work as printed.
@@ -26,17 +26,49 @@ serve: setup
 	$(COMPOSE) up -d --wait
 	cd mmfeaturestore && uv run --frozen python run.py
 
-# Encoder checks on synthetic clips. No Docker.
+# With the services running and songs stored (make run): the songs most like a file.
+#   make similar FILE=mmfeaturestore/output/synthetic/genres_original/synthetic_bass/synthetic_bass.00000.wav
+#   make similar FILE=path/to/image.png
+similar:
+	@test -n "$(FILE)" || { echo "Usage: make similar FILE=path/to/clip.wav (or an image)"; exit 2; }
+	uv run --frozen python scripts/similar.py "$(FILE)"
+
+# Your own music, in the GTZAN layout (see README, "Use your own data").
+# check-data checks every file and stores nothing; load stores the features and searches them.
+#   make check-data DIR=my_music
+#   make load DIR=my_music
+check-data:
+	@test -n "$(DIR)" || { echo "Usage: make check-data DIR=path/to/folder"; exit 2; }
+	uv run --frozen python scripts/own_data.py --dir "$(DIR)" --check-only
+
+load: setup
+	@test -n "$(DIR)" || { echo "Usage: make load DIR=path/to/folder"; exit 2; }
+	uv run --frozen python scripts/own_data.py --dir "$(DIR)" --check-only
+	$(COMPOSE) up -d --wait
+	uv run --frozen python scripts/own_data.py --dir "$(DIR)"
+
+# Try this: three measured experiments on synthetic clips (see README, "Try this"). No Docker.
+try-scaler: setup
+	uv run --frozen python experiments/scaler.py
+
+try-image-crop: setup
+	uv run --frozen python experiments/image_crop.py
+
+try-noise: setup
+	uv run --frozen python experiments/noise.py
+
+# Encoder checks on synthetic clips. No Docker. The own-data tests: uv run pytest tests/test_own_data.py
 smoke:
 	uv sync --frozen
-	uv run --frozen pytest -q tests
+	uv run --frozen pytest -q tests/test_smoke.py
 
 # GTZAN from Kaggle into mmfeaturestore/sample_data/ (1.2 GB). Needs a Kaggle API token in
 # ~/.kaggle/kaggle.json, or KAGGLE_USERNAME and KAGGLE_KEY.
 data: setup
 	cd mmfeaturestore && uv run --frozen python download_data.py
 
-# Stop the services and delete their volumes, and remove generated files.
+# Stop the services and delete their volumes, and remove generated files (mmfeaturestore/output/,
+# including the experiments' clips).
 # Downloaded GTZAN data in mmfeaturestore/sample_data/ is kept.
 clean:
 	-$(COMPOSE) down -v --remove-orphans

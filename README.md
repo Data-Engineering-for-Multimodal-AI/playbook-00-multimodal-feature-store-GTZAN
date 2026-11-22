@@ -7,7 +7,222 @@ To find songs that sound alike or have similar album art, you need features for 
 
 **What you'll work with.** You'll extract audio and image features, store them in a vector database (Milvus), process files as background jobs, and query everything through a REST API.
 
-## Overview
+> The original steps are under [Run it the way the book does](#run-it-the-way-the-book-does) and still work as written. Want the repository as it was first published? Use the `first-edition` tag.
+
+## Run it
+
+You need [uv](https://docs.astral.sh/uv/), `make` and Docker (PostgreSQL and Milvus run in containers). Or open the repo in a GitHub Codespace, where all of them are ready. On Windows without `make`, use a Codespace or the original steps below.
+
+`make run` uses synthetic clips: tones and noise in three made-up genres, with a spectrogram image for each, written on the fly. The GTZAN recordings are not in this repository; step 5 downloads them.
+
+**1. Get the code.** The clone is about 17 MB.
+
+```bash
+git clone https://github.com/Data-Engineering-for-Multimodal-AI/playbook-00-multimodal-feature-store-GTZAN.git
+cd playbook-00-multimodal-feature-store-GTZAN
+```
+
+**2. Store features and search them.** Installs the locked dependencies and the ResNet-18 weights (`uv sync --frozen`), starts PostgreSQL and Milvus (`docker compose up -d --wait`), writes 12 synthetic clips, extracts audio and image features for each with the API's worker and stores them, then runs one similarity search per genre (`python quickstart.py`). On a busy Mac, with the services already created and the images downloaded, this took 1 min 36 s. The first start downloads about 3 GB of container images.
+
+```bash
+make run
+```
+
+You should see, for each query song, its three nearest songs by audio and then by image:
+
+```
+12 clips in 3 genres
+Stored features for 12 songs in PostgreSQL and Milvus
+
+Most similar songs by audio (cosine similarity):
+  synthetic_bass.00000
+    0.9948  synthetic_bass.00001
+    0.8144  synthetic_bass.00002
+    0.7497  synthetic_bass.00003
+...
+  Same genre as the query: 9 of 9
+```
+
+PostgreSQL holds each song's metadata and file paths, Milvus one 28-number audio vector and one 512-number image vector per song. If another PostgreSQL already uses port 5433 on your machine, set `POSTGRES_PORT` to a free port first.
+
+**3. Search with a file yourself.** Encodes any WAV file (or image) with the same encoder and searches the stored songs (`python scripts/similar.py`).
+
+```bash
+make similar FILE=mmfeaturestore/output/synthetic/genres_original/synthetic_bass/synthetic_bass.00000.wav
+```
+
+```
+Most similar songs by audio to mmfeaturestore/output/synthetic/genres_original/synthetic_bass/synthetic_bass.00000.wav (cosine similarity):
+  1.0000  synthetic_bass.00000
+  0.9948  synthetic_bass.00001
+  0.8144  synthetic_bass.00002
+  0.7497  synthetic_bass.00003
+  0.2229  synthetic_treble.00000
+```
+
+The clip finds itself first, at 1.0000, then the other bass clips; the first treble clip is far behind. Pass a `.png` to search by image instead.
+
+**4. The API (optional).** Starts the services, then the REST API on http://localhost:8000 (`python run.py`). The endpoints and a full example are under [Usage](#usage). We didn't time this step.
+
+```bash
+make serve
+```
+
+**5. GTZAN (optional, Kaggle account).** Downloads GTZAN from Kaggle into `mmfeaturestore/sample_data/` (`python download_data.py`, 1.2 GB; needs a Kaggle API token), then runs step 2 on five clips per genre. We didn't run this step for this update.
+
+```bash
+make data
+make run-gtzan
+```
+
+**6. Clean up.**
+
+```bash
+make clean
+```
+
+This stops PostgreSQL and Milvus and deletes their volumes (every stored song and vector), and removes `mmfeaturestore/output/` (the synthetic clips and the experiments' files) and the test cache. Downloaded GTZAN data in `mmfeaturestore/sample_data/` and the installed packages stay. To stop the services and keep the data, run `docker compose stop` instead.
+
+## How much time do you have?
+
+| Time | What to do |
+|---|---|
+| 15 minutes | [Run it](#run-it), steps 1 to 3. On a busy Mac, step 2 took 1 min 36 s with the container images already downloaded. |
+| 1 hour | The three [Try this](#try-this) experiments, then `make similar` with your own WAV files. |
+| 1 day | Download GTZAN (step 5), [use your own data](#use-your-own-data), and work through [Before production](#before-production). |
+
+## Try this
+
+Each experiment changes one thing and measures the effect on synthetic clips the script writes (three made-up genres: bass tones, treble tones and noise bursts). They use the repo's encoders and rank by cosine similarity, the metric the Milvus collections use, so they need no Docker. The numbers below are from a busy Mac on 2026-11-21; times are left out because the machine was loaded.
+
+**1. What does standardizing the audio features do?** The 28 audio features mix units: two of them, the spectral centroid and rolloff, are in thousands of Hz. The encoder standardizes each feature with `models/audio_scaler.json` (statistics over 999 GTZAN clips) before normalizing. This encodes 24 clips with and without that step.
+
+```bash
+make try-scaler
+```
+
+```
+audio features    nearest is same genre  same genre  other genres     gap  pairs above 0.98
+standardized                       96%       0.741        -0.053   0.794         35 of 276
+raw                               100%       1.000         0.990   0.010        276 of 276
+```
+
+Without standardizing, every pair of clips scores above 0.98: the nearest clip is still right, but a similarity threshold or a score shown to a user means nothing. With it, clips of other genres average below 0. One clip in 24 now finds a clip of another genre first. Change which features `src/encoders/audio.py` scales and run it again.
+
+**2. How much of the spectrogram does the image encoder see?** The image encoder resizes each image to a short side of 256 pixels and keeps the center 224 x 224 for ResNet-18. This blacks out parts of 12 spectrogram images (432 x 288, the size `quickstart.py` writes) and compares the vectors with the originals.
+
+```bash
+make try-image-crop
+```
+
+```
+12 spectrogram images of 432 x 288; the encoder keeps x 90-342, y 18-270
+That is 58% of the clip's duration and 88% of its mel bands.
+
+blacked out                       share of pixels  similarity to the original vector
+first and last 20% of the time                40%                             1.0000
+top and bottom 5% of the bands                10%                             1.0000
+middle 40% of the time                        40%                             0.6152
+middle 10% of the bands                       10%                             0.8674
+```
+
+The image features never see the first and last fifth of the clip: blacking them out changes nothing. For a 30-second clip drawn at that size, that is about 13 seconds. The `transforms` in `src/encoders/image.py` decide this; try `transforms.Resize((224, 224))` and run it again.
+
+**3. Which modality copes with a noisy recording?** Stores 18 clean clips, then searches with noisy copies (white noise at a falling signal-to-noise ratio), by audio features and by the spectrogram image.
+
+```bash
+make try-noise
+```
+
+```
+    SNR  audio: finds itself  same genre  image: finds itself  same genre
+  clean                 100%         94%                 100%        100%
+  30 dB                  94%         94%                  83%        100%
+  20 dB                  89%         94%                  67%        100%
+  10 dB                  72%         94%                  50%        100%
+   0 dB                  28%         67%                  22%        100%
+ -10 dB                   6%         33%                   6%         56%
+```
+
+Neither finds the exact clip once the noise is loud, but the image features keep finding the right genre down to 0 dB, where the audio features drop to 67%. The two modalities fail differently, which is a reason to store both. Change `SNR_DB` in `experiments/noise.py`, or the noise itself.
+
+## Use your own data
+
+Put your clips in a folder with GTZAN's layout:
+
+```
+my_music/
+  genres_original/<genre>/<name>.<number>.wav      audio, any sample rate (read at 22,050 Hz)
+  images_original/<genre>/<genre><number>.png      optional: one image per clip
+```
+
+The image for `genres_original/jazz/take.00007.wav` is `images_original/jazz/jazz00007.png`, as in GTZAN. A clip without an image is stored with audio only. Each song's ID is the first 36 characters of its file name. Check the folder first. This reads every file and stores nothing:
+
+```bash
+make check-data DIR=my_music
+```
+
+It reports every file it can't use and why: a file that isn't `.wav`, an empty or unreadable WAV, a clip shorter than 1 s or completely silent, a Git LFS pointer, an image that won't open or is smaller than 32 x 32, and two files that would get the same song ID. On a folder with deliberate mistakes:
+
+```
+7 problems in my_music; nothing was stored:
+  genres_original/synthetic_bass/quiet.00010.wav: silent (every sample is 0)
+  genres_original/synthetic_bass/short.00011.wav: 0.50 s long, needs at least 1 s
+  images_original/synthetic_bass/synthetic_bass00001.png: a Git LFS pointer, not the image (run git lfs pull)
+  images_original/synthetic_bass/synthetic_bass00002.png: too small (16x16), needs at least 32x32
+  genres_original/synthetic_treble/song.mp3: not a .wav file (only .wav is read; convert it first)
+  genres_original/synthetic_treble/broken.00012.wav: can't read as WAV audio (LibsndfileError)
+  genres_original/synthetic_treble/synthetic_bass.00000.wav: same song ID 'synthetic_bass.00000' as genres_original/synthetic_bass/synthetic_bass.00000.wav (IDs are the first 36 characters of the name)
+```
+
+When everything passes, store every clip and search them. This starts the services if needed and runs step 2 on your folder (`python quickstart.py --data my_music`):
+
+```bash
+make load DIR=my_music
+```
+
+```
+my_music: OK, 8 clips in 2 genres, 8 with an image
+...
+Stored features for 8 songs in PostgreSQL and Milvus
+```
+
+This took 1 min 27 s for 8 clips on the same Mac. Songs already stored under the same ID are replaced; other stored songs stay, so `make similar` searches all of them. `make clean` empties the store.
+
+## What you end up with
+
+A feature store with your clips in it, one audio vector and one image vector per song, searchable by file or through an API, and three measurements of what the features keep and lose.
+
+Skills you'll practice:
+- Extracting hand-built audio features and CNN image features from the same recordings
+- Standardizing features with stored statistics before comparing them
+- Storing vectors in Milvus and metadata in PostgreSQL, keyed by the same ID
+- Checking what a preprocessing step drops before trusting its features
+- Comparing how each modality degrades on noisy input
+- Validating input files before they reach the pipeline
+
+## Before production
+
+This playbook runs a few clips on one machine. Before you run something like it for real:
+
+1. **Version the scaler with the vectors.** Audio vectors depend on `models/audio_scaler.json`: without it, every pair of clips scored above 0.98 ([Try this 1](#try-this)). If the file changes or is missing (the encoder only logs a warning), old and new vectors no longer compare. Store the scaler's version with each vector and re-encode when it changes. *Chapter 5, "Preprocessing as Feature Engineering" (page 138); Chapter 8, "Data Versioning and Experiment Tracking for Multimodal AI" (page 276).*
+2. **Check what preprocessing drops.** The image transform keeps 58% of a spectrogram's duration ([Try this 2](#try-this)). Resize to the model's input without cropping, or split long clips into windows. *Chapter 5, "Extracting Features Across Modalities" (page 139).*
+3. **Search both modalities and combine them.** Under noise, image features kept the genre down to 0 dB while audio features fell to 67% ([Try this 3](#try-this)). Query both collections and merge the results, and measure the merge. *Chapter 5, "Feature Selection and Fusion in Multimodal Contexts" (page 143).*
+4. **Pick the index for the collection size.** Both collections use IVF_FLAT with `nlist=1024` and search with `nprobe=10`; with 12 songs, that index has more clusters than vectors. Measure recall and latency at your size before choosing. *Chapter 6, "Vector Databases" (page 180).*
+5. **Use stable song IDs.** `quickstart.py` uses the first 36 characters of the file name as the ID, so two files can collide (`make check-data` catches it within one folder, not against songs already stored). Assign IDs when a song is registered. *Chapter 5, "Why Feature Stores Are Needed" (page 155).*
+6. **Process in a queue with retries.** The API runs extraction as asyncio tasks inside its own process, and a job that fails stays failed. Put jobs on a queue with workers, retries and a dead-letter list. *Chapter 2, "Production Patterns for Reliability and Scale" (page 51).*
+7. **Watch the store.** Track jobs per status, extraction time per modality and search latency, and alert when Milvus is down; today the worker only logs "vector operations will be disabled". *Chapter 2, "Monitoring and Observability" (page 53).*
+8. **Lock down the services.** PostgreSQL and MinIO use development passwords from `docker-compose.yml`, and the API has no authentication. *Chapter 11, "Protecting Data Across the Pipeline" (page 421).*
+9. **Respect the recordings' rights.** GTZAN's audio comes from commercial recordings and isn't redistributed here. Record source and license for every clip you store. *Chapter 11, "Lineage and Provenance Tracking" (page 416).*
+
+## What it costs
+
+| Where you run it | Cost |
+|---|---|
+| Your machine | $0. Everything runs locally: no API keys, no paid services. A Kaggle account (free) only for GTZAN. The clone is about 17 MB, the Python environment 1.2 GB, and the PostgreSQL and Milvus images about 3.3 GB. |
+| A GitHub Codespace (4 cores, 16 GB, the size this repo asks for) | Estimated $0.36 per hour at GitHub's list price (November 2026). A free personal account includes 120 core-hours a month, about 30 hours on this machine. |
+
+## How it works
 
 This feature store provides a comprehensive solution for processing and retrieving music data across multiple modalities (audio and image). The system extracts meaningful features from audio files and album artwork, stores them in optimized vector databases, and enables powerful similarity searches to find music with similar acoustic properties or visual aesthetics.
 
@@ -62,7 +277,9 @@ The system uses the following data model:
   - Modality type (audio/image)
   - High-dimensional vector data
 
-## Setup & Installation
+## Run it the way the book does
+
+The book doesn't print this repository; these are the original steps, and they still work as written.
 
 ### System Requirements
 
@@ -678,7 +895,14 @@ curl -X POST http://localhost:8000/songs/{song_id}/similar \
 
 ## Project Structure
 
-The repository is organized as follows:
+The repository is organized as follows. At the top level:
+
+```
+experiments/                      # Try this: scaler.py, image_crop.py, noise.py (make try-...)
+scripts/                          # own_data.py (make check-data, make load), similar.py (make similar)
+tests/                            # test_smoke.py (make smoke), test_own_data.py
+mmfeaturestore/                   # the feature store, below
+```
 
 ```
 mmfeaturestore/
