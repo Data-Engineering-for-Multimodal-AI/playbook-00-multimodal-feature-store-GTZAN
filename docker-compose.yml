@@ -1,7 +1,7 @@
 # The services are defined in mmfeaturestore/docker-compose.yml. This file includes it, so
 # `docker-compose up -d` (or `docker compose up -d`) from the repository root starts the same
 # containers as running it from mmfeaturestore/. Needs Docker Compose 2.20 or newer.
-name: mmfeaturestore
+name: playbook-00-gtzan
 
 include:
   - mmfeaturestore/docker-compose.yml

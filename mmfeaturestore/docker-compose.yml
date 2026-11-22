@@ -5,14 +5,14 @@
 # `docker compose down -v` deletes it. PostgreSQL listens on host port 5433, so a local PostgreSQL
 # on 5432 can keep running. The credentials are local development defaults.
 # Adapted from the update-2026 branch (PostgreSQL 17, Milvus 3.0.3 with health checks).
-name: mmfeaturestore
+name: playbook-00-gtzan
 
 x-milvus-image: &milvus-image milvusdb/milvus:v3.0.3
 
 services:
   postgres:
     image: postgres:17
-    container_name: featurestore-postgres
+    container_name: gtzan-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-featurestore_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-featurestore}
