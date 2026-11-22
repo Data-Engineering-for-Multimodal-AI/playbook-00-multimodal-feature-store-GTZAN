@@ -111,11 +111,13 @@ async def main(argv=None) -> int:
     await postgres.create_tables()
 
     # Rerunning replaces each song's vectors instead of adding copies
+    logging.getLogger("src.db.milvus").setLevel(logging.ERROR)   # "collection does not exist" on a first run
     milvus.connect()
     for modality in (Modality.AUDIO, Modality.IMAGE):
         for s in songs:
             milvus.delete_embedding(s["id"], modality)
     milvus.disconnect()   # the worker opens and closes its own Milvus connection
+    logging.getLogger("src.db.milvus").setLevel(logging.NOTSET)
 
     failed = []
     for s in songs:
@@ -148,7 +150,7 @@ async def main(argv=None) -> int:
             found += len(hits)
             print(f"  {song_id}")
             for hit_id, score in hits:
-                print(f"    {score:.3f}  {hit_id}")
+                print(f"    {score:.4f}  {hit_id}")
                 same += genre_of.get(hit_id) == genre
                 total += 1
         if total:
