@@ -1,6 +1,11 @@
-# Multimodal Feature Store
+# Playbook 00: Find songs that sound alike or look alike
+**How to build an audio and image feature store with Milvus.** A companion playbook for [*Data Engineering for Multimodal AI*](https://oreil.ly/data-engineering-multimodal) (O'Reilly, 2026). Not printed in the book.
 
-A robust feature store for audio and image data that enables efficient extraction, storage, and similarity search across multimodal music data.
+To find songs that sound alike or have similar album art, you need features for both and a fast way to compare them. In this repo, we explore this with the GTZAN music dataset. Follow along to extract audio and image features, store them in Milvus, and search for similar songs through an API.
+
+**The problem.** Audio and images need different features, but you want one place to search both.
+
+**What you'll work with.** You'll extract audio and image features, store them in a vector database (Milvus), process files as background jobs, and query everything through a REST API.
 
 ## Overview
 

@@ -26,6 +26,7 @@ Not printed in the book. Nothing the book shows has changed.
 - The GTZAN link (marsyas.info) no longer answers. The READMEs link to the Kaggle page.
 
 ### Changed
+- README opening: a title that says what you'll do, three sentences on why, the example and what you'll do, then the data engineering problem and what you'll work with.
 - `mmfeaturestore/docker-compose.yml` is the one compose file. The root `docker-compose.yml` includes
   it, so `docker-compose up -d` starts the same containers from either folder. Milvus 3.0.3 (was
   2.3.3), etcd 3.5.25 and MinIO with health checks, data in named Docker volumes.
