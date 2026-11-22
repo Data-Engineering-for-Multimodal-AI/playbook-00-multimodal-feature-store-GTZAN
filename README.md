@@ -220,7 +220,7 @@ This playbook runs a few clips on one machine. Before you run something like it 
 | Where you run it | Cost |
 |---|---|
 | Your machine | $0. Everything runs locally: no API keys, no paid services. A Kaggle account (free) only for GTZAN. The clone is about 17 MB, the Python environment 1.2 GB, and the PostgreSQL and Milvus images about 3.3 GB. |
-| A GitHub Codespace (4 cores, 16 GB, the size this repo asks for) | Estimated $0.36 per hour at GitHub's list price (November 2026). A free personal account includes 120 core-hours a month, about 30 hours on this machine. |
+| A GitHub Codespace (4 cores, 16 GB, the size this repo asks for) | Estimated $0.36 per hour at GitHub's list price (November 2026). A free personal account includes 120 core-hours a month, about 30 hours on this machine. In CI, `make run` in a freshly built devcontainer, including the first start of PostgreSQL and Milvus, took 85 s. |
 
 ## How it works
 
