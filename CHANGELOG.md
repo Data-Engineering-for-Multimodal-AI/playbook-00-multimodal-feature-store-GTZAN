@@ -17,6 +17,10 @@ Not printed in the book. Nothing the book shows has changed.
   devcontainer and runs `make run` inside it.
 
 ### Fixed
+- Audio features are standardized with `mmfeaturestore/models/audio_scaler.json` (statistics over 999
+  GTZAN clips) before normalizing. Before, every pair of clips scored about 1.0.
+- `make run` can run again with the services still up: deleting old vectors loads the Milvus
+  collection first (Milvus 3 needs it loaded).
 - PostgreSQL was not in `docker-compose.yml`, and the API hard-coded its connection settings. It now
   runs in compose on host port 5433, and `POSTGRES_*` environment variables set the connection.
 - Image features came from a ResNet-18 with random weights. It now loads the ImageNet weights.

@@ -233,6 +233,7 @@ The repository includes several test scripts for exploring and validating the fe
 1. **Audio Features**:
    - Processes WAV files to extract a 28-dimensional feature vector
    - Features capture timbral, rhythmic, and harmonic characteristics
+   - Each feature is standardized with the mean and standard deviation in `mmfeaturestore/models/audio_scaler.json` (measured over 999 GTZAN clips), then the vector is normalized to length 1. Without this step, the spectral centroid and rolloff, measured in thousands of Hz, outweigh the other 26 features, and every clip scores about 1.0 against every other one. In `make run`, the synthetic clips' audio similarities went from 0.9999 to 1.0000 without it to between 0.52 and 0.9995 with it.
 
 2. **Image Features**:
    - Processes PNG/JPEG album artwork using deep learning models

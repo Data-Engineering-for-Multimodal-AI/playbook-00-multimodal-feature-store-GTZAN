@@ -181,7 +181,8 @@ class MilvusClient:
         
         collection = self.collections[modality]
         
-        # Delete embeddings for this song
+        # Delete embeddings for this song. Milvus 3 deletes by expression only from a loaded collection.
+        collection.load()
         collection.delete(f'song_id == "{song_id}"')
         
         self.logger.info(f"Deleted embeddings for song {song_id} in modality {modality.value}")
