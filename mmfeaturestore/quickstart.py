@@ -20,6 +20,7 @@ import argparse
 import asyncio
 import logging
 import sys
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -89,6 +90,8 @@ async def main(argv=None) -> int:
     parser.add_argument("--top-k", type=int, default=3)
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.WARNING, force=True)
+    # src/db/milvus.py uses pymilvus's ORM API, which pymilvus 3.0 marks as deprecated
+    warnings.filterwarnings("ignore", message=".*ORM-style PyMilvus API.*")
 
     if args.data is None:
         make_synthetic_data(SYNTHETIC, args.per_genre)
