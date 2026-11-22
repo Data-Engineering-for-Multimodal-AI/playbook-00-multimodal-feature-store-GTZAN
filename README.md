@@ -547,6 +547,8 @@ Common issues:
 - `pydantic`: Data validation
 - `uvicorn`: ASGI server
 
+If this playbook helped you, a star helps other readers find it.
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
