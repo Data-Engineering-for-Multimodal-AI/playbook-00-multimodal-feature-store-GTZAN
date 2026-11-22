@@ -35,9 +35,8 @@ mmfeaturestore/
 
 ### Prerequisites
 
-- Python 3.10+
-- PostgreSQL
-- Milvus (or Milvus Lite)
+- Python 3.12+
+- PostgreSQL and Milvus (`docker compose up -d` starts both)
 
 ### Installation
 
@@ -56,11 +55,11 @@ mmfeaturestore/
 
 4. Set up environment variables (optional):
    ```bash
-   export POSTGRES_USER=postgres
-   export POSTGRES_PASSWORD=postgres
-   export POSTGRES_HOST=localhost
-   export POSTGRES_PORT=5432
-   export POSTGRES_DB=mmfeaturestore
+   export POSTGRES_USER=featurestore_user
+   export POSTGRES_PASSWORD=featurestore
+   export POSTGRES_HOST=127.0.0.1
+   export POSTGRES_PORT=5433
+   export POSTGRES_DB=featurestore
    export MILVUS_HOST=localhost
    export MILVUS_PORT=19530
    ```
@@ -73,7 +72,7 @@ Start the FastAPI server:
 
 ```bash
 cd mmfeaturestore
-python -m src.api.main
+python run.py
 ```
 
 The API will be available at http://localhost:8000, with interactive documentation at http://localhost:8000/docs.

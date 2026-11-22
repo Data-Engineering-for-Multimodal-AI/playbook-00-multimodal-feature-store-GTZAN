@@ -63,7 +63,8 @@ class MilvusClient:
         schema = CollectionSchema(fields=fields, description=f"Song {modality.value} embeddings")
         
         # Create collection
-        collection = Collection(name=collection_name, schema=schema)
+        # Strong consistency: a vector is searchable as soon as it is inserted
+        collection = Collection(name=collection_name, schema=schema, consistency_level="Strong")
         
         # Create index for vector field
         index_params = {
@@ -117,7 +118,8 @@ class MilvusClient:
         # Query the embedding
         results = collection.query(
             expr=f'song_id == "{song_id}"',
-            output_fields=["embedding"]
+            output_fields=["embedding"],
+            consistency_level="Strong"
         )
         
         collection.release()
@@ -152,7 +154,8 @@ class MilvusClient:
             anns_field="embedding",
             param=search_params,
             limit=top_k,
-            output_fields=["song_id"]
+            output_fields=["song_id"],
+            consistency_level="Strong"
         )
         
         collection.release()
@@ -178,7 +181,8 @@ class MilvusClient:
         
         collection = self.collections[modality]
         
-        # Delete embeddings for this song
+        # Delete embeddings for this song. Milvus 3 deletes by expression only from a loaded collection.
+        collection.load()
         collection.delete(f'song_id == "{song_id}"')
         
         self.logger.info(f"Deleted embeddings for song {song_id} in modality {modality.value}")

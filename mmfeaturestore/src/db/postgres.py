@@ -14,11 +14,13 @@ class PostgresClient:
                  host: Optional[str] = None, port: Optional[str] = None, 
                  database: Optional[str] = None):
         """Initialize PostgreSQL client with connection details"""
-        self.user = user or os.environ.get("POSTGRES_USER", "postgres")
-        self.password = password or os.environ.get("POSTGRES_PASSWORD", "postgres")
-        self.host = host or os.environ.get("POSTGRES_HOST", "localhost")
-        self.port = port or os.environ.get("POSTGRES_PORT", "5432")
-        self.database = database or os.environ.get("POSTGRES_DB", "mmfeaturestore")
+        # Defaults match the postgres service in docker-compose.yml (host port 5433, so a local
+        # PostgreSQL on 5432 can keep running). Environment variables override them.
+        self.user = user or os.environ.get("POSTGRES_USER", "featurestore_user")
+        self.password = password or os.environ.get("POSTGRES_PASSWORD", "featurestore")
+        self.host = host or os.environ.get("POSTGRES_HOST", "127.0.0.1")
+        self.port = port or os.environ.get("POSTGRES_PORT", "5433")
+        self.database = database or os.environ.get("POSTGRES_DB", "featurestore")
         self.logger = logging.getLogger(__name__)
         self.pool = None
 

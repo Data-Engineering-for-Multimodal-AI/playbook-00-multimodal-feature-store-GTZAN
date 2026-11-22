@@ -37,14 +37,10 @@ app.add_middleware(
 )
 
 # Database connections
-postgres_client = PostgresClient(
-    user="featurestore_user",
-    password="",  # No password for local development
-    host="localhost",
-    port="5432",
-    database="featurestore"
-)
+# Connection settings come from POSTGRES_* environment variables (defaults: docker-compose.yml)
+postgres_client = PostgresClient()
 milvus_client = MilvusClient()
+background_tasks_running = set()
 
 # Models for API requests/responses
 class SongCreate(BaseModel):
@@ -181,7 +177,9 @@ async def process_song(song_id: str, request: ProcessingRequest, background_task
     logger.info(f"Processing job {job_id} for song {song_id} with modalities {modalities}")
     
     # Process in a separate task to not block the response
-    asyncio.create_task(process_song_features(song_id, modalities))
+    task = asyncio.create_task(process_song_features(song_id, modalities, job_id=job_id))
+    background_tasks_running.add(task)   # keep a reference until the task finishes
+    task.add_done_callback(background_tasks_running.discard)
     
     return job
 

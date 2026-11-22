@@ -1,0 +1,21 @@
+{
+  "name": "Playbook 00: feature store for music audio",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": { "moby": false, "iptablesSwitchAtRuntime": false }
+  },
+  "hostRequirements": { "cpus": 4, "memory": "16gb" },
+  "onCreateCommand": "pip install --no-cache-dir uv==0.13.0",
+  "postCreateCommand": "make setup",
+  "postStartCommand": "docker info > /dev/null 2>&1 || (sudo update-alternatives --set iptables /usr/sbin/iptables-nft && sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-nft && /usr/local/share/docker-init.sh && docker info > /dev/null)",
+  "forwardPorts": [8000, 19530, 5433],
+  "portsAttributes": {
+    "8000": { "label": "Feature store API" },
+    "19530": { "label": "Milvus" },
+    "5433": { "label": "PostgreSQL" }
+  },
+  "customizations": {
+    "codespaces": { "openFiles": ["README.md"] },
+    "vscode": { "extensions": ["ms-python.python"] }
+  }
+}
