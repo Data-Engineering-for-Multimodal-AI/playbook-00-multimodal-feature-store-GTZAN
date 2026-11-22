@@ -39,7 +39,7 @@ These samples are used by the test scripts in the repository root, such as:
 
 The audio samples are from the GTZAN dataset, which is a collection of 1000 audio tracks, each 30 seconds long, with 100 tracks per genre. The dataset is widely used for music genre classification tasks.
 
-You can download the GTZAN dataset from: [GTZAN Genre Collection](http://marsyas.info/downloads/datasets.html)
+You can download the GTZAN dataset from: [GTZAN on Kaggle](https://www.kaggle.com/datasets/andradaolteanu/gtzan-dataset-music-genre-classification). From the repository root, `make data` downloads it here (needs a Kaggle API token).
 
 The image samples are generated artwork that visually represents each genre's aesthetic.
 

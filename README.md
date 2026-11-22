@@ -71,17 +71,16 @@ The system uses the following data model:
 
 ### Prerequisites
 
-- **Python 3.8+**
-- **PostgreSQL 12+**
-- **Docker** (for running Milvus)
-- **Docker Compose** (for managing Milvus services)
+- **Python 3.12+**
+- **Docker** (runs PostgreSQL and Milvus)
+- **Docker Compose** 2.20 or newer
 
 ### Installation Steps
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/mmfeaturestore.git
-   cd mmfeaturestore
+   git clone https://github.com/Data-Engineering-for-Multimodal-AI/playbook-00-multimodal-feature-store-GTZAN.git
+   cd playbook-00-multimodal-feature-store-GTZAN
    ```
 
 2. Install dependencies:
@@ -89,14 +88,16 @@ The system uses the following data model:
    pip install -r requirements.txt
    ```
 
-3. Start the PostgreSQL database:
+3. PostgreSQL runs in Docker with Milvus (next step). It listens on host port 5433, with user
+   `featurestore_user`, password `featurestore` and database `featurestore`. To use a PostgreSQL you
+   installed yourself instead, create the user and database and point the API at it:
    ```bash
-   # Setup PostgreSQL with user "featurestore_user" and database "featurestore"
    createuser --createdb featurestore_user
    createdb -O featurestore_user featurestore
+   export POSTGRES_PORT=5432
    ```
 
-4. Start the Milvus service:
+4. Start PostgreSQL and the Milvus service:
    ```bash
    # Using Docker Compose (recommended)
    docker-compose up -d
@@ -108,10 +109,10 @@ The system uses the following data model:
    docker ps | grep milvus
    
    # Check Milvus logs for any issues
-   docker logs mmfeaturestore_standalone_1
+   docker logs milvus-standalone
    
    # Test connection to Milvus
-   curl http://localhost:19530/healthz
+   curl http://localhost:9091/healthz
    ```
    
    If you need to restart Milvus:
@@ -122,6 +123,7 @@ The system uses the following data model:
 
 5. Start the API server:
    ```bash
+   cd mmfeaturestore
    python run.py
    ```
 
@@ -138,7 +140,7 @@ Genres include: pop, rock, jazz, classical, metal, blues, disco, reggae, hiphop,
 
 If the sample data is missing when you clone the repository, you can:
 
-1. Download the GTZAN dataset for audio samples: [GTZAN Genre Collection](http://marsyas.info/downloads/datasets.html)
+1. Download the GTZAN dataset for audio samples: [GTZAN on Kaggle](https://www.kaggle.com/datasets/andradaolteanu/gtzan-dataset-music-genre-classification). `make data` downloads it into `mmfeaturestore/sample_data/` (needs a Kaggle API token).
 2. Place audio files in the appropriate genre folders under `mmfeaturestore/sample_data/genres_original/`
 3. Create or download album artwork images and place them in the corresponding folders under `mmfeaturestore/sample_data/images_original/`
 
@@ -294,7 +296,7 @@ docker-compose up -d
 If containers are running but you still can't connect:
 ```bash
 # Check Milvus logs for errors
-docker logs mmfeaturestore_standalone_1
+docker logs milvus-standalone
 
 # Restart Milvus containers
 docker-compose restart
@@ -338,7 +340,7 @@ When running `python run.py` to start the server, you should see:
 INFO: NumExpr defaulting to 8 threads.
 INFO: Started server process [XXXXX]
 INFO: Waiting for application startup.
-INFO: Connected to PostgreSQL at localhost:5432/featurestore
+INFO: Connected to PostgreSQL at 127.0.0.1:5433/featurestore
 INFO: Created tables if they didn't exist
 INFO: Connected to Milvus at localhost:19530
 INFO: Connected to Milvus
@@ -414,15 +416,14 @@ Successfully installed pymilvus-2.3.1 fastapi-0.103.1 uvicorn-0.23.2 asyncpg-0.2
 
 ### 2. Starting the PostgreSQL Database
 
-Ensure PostgreSQL is running and create the necessary database:
+PostgreSQL starts with Milvus in the next step (`docker-compose up -d`), on host port 5433. If you
+use your own PostgreSQL instead, create the user and database and set `POSTGRES_PORT`:
 
 ```bash
 createuser --createdb featurestore_user
 createdb -O featurestore_user featurestore
+export POSTGRES_PORT=5432
 ```
-
-Expected output:
-No output if successful.
 
 ### 3. Starting Milvus with Docker
 
@@ -464,7 +465,7 @@ Expected output:
 INFO: NumExpr defaulting to 8 threads.
 INFO: Started server process [58006]
 INFO: Waiting for application startup.
-INFO: Connected to PostgreSQL at localhost:5432/featurestore
+INFO: Connected to PostgreSQL at 127.0.0.1:5433/featurestore
 INFO: Created tables if they didn't exist
 INFO: Connected to Milvus at localhost:19530
 INFO: Connected to Milvus
@@ -484,7 +485,7 @@ This script processes a rock sample from the sample data. You'll see output like
 
 ```
 INFO: NumExpr defaulting to 8 threads.
-INFO: Connected to PostgreSQL at localhost:5432/featurestore
+INFO: Connected to PostgreSQL at 127.0.0.1:5433/featurestore
 INFO: Using song ID: 610cd810-735b-4996-a94e-f5ed65ea1738
 INFO: Updated audio path: mmfeaturestore/sample_data/genres_original/rock/rock.00000.wav
 INFO: Updated image path: mmfeaturestore/sample_data/images_original/rock/rock00000.png
@@ -618,7 +619,7 @@ docker-compose up -d
 If containers are running but you still can't connect:
 ```bash
 # Check Milvus logs for errors
-docker logs mmfeaturestore_standalone_1
+docker logs milvus-standalone
 
 # Restart Milvus containers
 docker-compose restart
