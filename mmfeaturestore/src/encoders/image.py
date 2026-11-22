@@ -11,8 +11,8 @@ class ImageEncoder:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         
-        # Load pre-trained model (ResNet18)
-        self.model = models.resnet18(weights=None)
+        # Load pre-trained model (ResNet18, ImageNet weights; 45 MB, downloaded on first use)
+        self.model = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
         
         # Remove the final fully connected layer
         self.model = torch.nn.Sequential(*(list(self.model.children())[:-1]))

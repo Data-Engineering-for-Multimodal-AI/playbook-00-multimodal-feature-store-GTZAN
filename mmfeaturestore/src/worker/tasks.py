@@ -19,13 +19,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-async def process_song_features(song_id: str, modalities: List[Modality] = None) -> ProcessingJob:
+async def process_song_features(song_id: str, modalities: List[Modality] = None,
+                                job_id: Optional[str] = None) -> ProcessingJob:
     """
     Process song features for specified modalities
     
     Args:
         song_id: ID of the song to process
         modalities: List of modalities to process, or None for all
+        job_id: An existing job to update (the API creates one), or None to create a new job
     
     Returns:
         ProcessingJob object with status
@@ -34,11 +36,7 @@ async def process_song_features(song_id: str, modalities: List[Modality] = None)
     
     # Initialize clients
     logger.info(f"Initializing clients for song {song_id}")
-    postgres_client = PostgresClient(
-        user="featurestore_user",
-        password="",  # No password for local development
-        database="featurestore"
-    )
+    postgres_client = PostgresClient()
     milvus_client = MilvusClient()
     
     # Connect to databases
@@ -61,16 +59,16 @@ async def process_song_features(song_id: str, modalities: List[Modality] = None)
                 if modality.value in song.data_paths:
                     modalities.append(modality)
         
-        # Create a processing job
-        job_id = str(uuid.uuid4())
-        job = ProcessingJob(
-            job_id=job_id,
-            song_id=song_id,
-            modalities=[m.value for m in modalities],
-            status={m.value: FeatureStatus.PENDING.value for m in modalities}
-        )
-        
-        await postgres_client.create_processing_job(job)
+        # Create a processing job, unless the caller already did
+        if job_id is None:
+            job_id = str(uuid.uuid4())
+            job = ProcessingJob(
+                job_id=job_id,
+                song_id=song_id,
+                modalities=[m.value for m in modalities],
+                status={m.value: FeatureStatus.PENDING.value for m in modalities}
+            )
+            await postgres_client.create_processing_job(job)
         
         # Process each modality
         encoder_factory = EncoderFactory()
@@ -135,11 +133,7 @@ async def process_song_features(song_id: str, modalities: List[Modality] = None)
 
 async def get_job_status(job_id: str) -> Optional[ProcessingJob]:
     """Get the status of a processing job"""
-    postgres_client = PostgresClient(
-        user="featurestore_user",
-        password="featurestore_password",
-        database="featurestore"
-    )
+    postgres_client = PostgresClient()
     await postgres_client.connect()
     
     try:
