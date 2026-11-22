@@ -2,7 +2,7 @@
   "name": "Playbook 00: feature store for music audio",
   "image": "mcr.microsoft.com/devcontainers/python:3.12",
   "features": {
-    "ghcr.io/devcontainers/features/docker-in-docker:2": { "moby": false }
+    "ghcr.io/devcontainers/features/docker-in-docker:2": { "moby": false, "iptablesSwitchAtRuntime": false }
   },
   "hostRequirements": { "cpus": 4, "memory": "16gb" },
   "onCreateCommand": "pip install --no-cache-dir uv==0.13.0",
