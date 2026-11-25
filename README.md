@@ -514,46 +514,7 @@ The repository includes several test scripts for exploring and validating the fe
    kill <PID>
    ```
 
-### 1. Milvus Connection Issues
-
-If you see:
-```
-ERROR: Failed to connect to Milvus: <MilvusException: (code=2, message=Fail connecting to server on localhost:19530)>
-WARNING: Failed to connect to Milvus, vector operations will be disabled
-```
-
-**Solution:**
-
-First verify Milvus is running:
-```bash
-# Check if Milvus containers are running
-docker ps | grep milvus
-```
-
-If containers are not running:
-```bash
-# Start Milvus and related services
-docker-compose up -d
-```
-
-If containers are running but you still can't connect:
-```bash
-# Check Milvus logs for errors
-docker logs milvus-standalone
-
-# Restart Milvus containers
-docker-compose restart
-
-# If problems persist, recreate the containers
-docker-compose down
-docker-compose up -d
-```
-
-Common issues:
-- Docker not running
-- Port 19530 is in use by another application
-- Insufficient memory for Milvus (check Docker resource limits)
-- Corrupted Milvus data (check logs for any data errors)
+For full error messages and step-by-step fixes, see [Common Issues and Troubleshooting](#common-issues-and-troubleshooting).
 
 ## Dependencies
 
