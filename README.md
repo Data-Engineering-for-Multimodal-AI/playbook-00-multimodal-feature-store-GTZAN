@@ -553,6 +553,8 @@ If this playbook helped you, a star helps other readers find it.
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+The datasets and models this playbook uses keep their own licenses. See [DATA_LICENSES.md](DATA_LICENSES.md).
+
 The MIT License is a permissive license that allows for reuse with few restrictions. You are free to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the software, provided that the original copyright notice and permission notice appear in all copies.
 
 ## What to Expect When Running

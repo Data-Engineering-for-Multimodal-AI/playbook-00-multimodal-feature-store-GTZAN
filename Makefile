@@ -15,6 +15,7 @@ setup:
 run: setup
 	$(COMPOSE) up -d --wait
 	cd mmfeaturestore && uv run --frozen python quickstart.py
+	@echo "playbook-00-multimodal-feature-store-GTZAN" > .playbook-done
 
 # The same on the real GTZAN data, after `make data`.
 run-gtzan: setup
