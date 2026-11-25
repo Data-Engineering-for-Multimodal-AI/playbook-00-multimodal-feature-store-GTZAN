@@ -1,5 +1,15 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/header-dark.png">
+  <img src="docs/img/header-light.png" alt="Playbook 00, a starter for Data Engineering for Multimodal AI. Build: an audio and image feature store. Data: audio and images." width="100%">
+</picture>
+
 # Playbook 00: Find songs that sound alike or look alike
 **How to build an audio and image feature store with Milvus.** A companion playbook for [*Data Engineering for Multimodal AI*](https://oreil.ly/data-engineering-multimodal) (O'Reilly, 2026). Not printed in the book.
+
+[![Tests](https://github.com/Data-Engineering-for-Multimodal-AI/playbook-00-multimodal-feature-store-GTZAN/actions/workflows/smoke.yml/badge.svg?branch=main)](https://github.com/Data-Engineering-for-Multimodal-AI/playbook-00-multimodal-feature-store-GTZAN/actions/workflows/smoke.yml)
+![Python 3.12 | 3.13](https://img.shields.io/badge/python-3.12%20%7C%203.13-1f1a19?labelColor=6b6361)
+[![License: MIT](https://img.shields.io/badge/license-MIT-1f1a19?labelColor=6b6361)](LICENSE)
+[![Open in GitHub Codespaces](https://img.shields.io/badge/Open%20in-Codespaces-b4422e?logo=github&labelColor=6b6361)](https://codespaces.new/Data-Engineering-for-Multimodal-AI/playbook-00-multimodal-feature-store-GTZAN?quickstart=1)
 
 To find songs that sound alike or have similar album art, you need features for both and a fast way to compare them. In this repo, we explore this with the GTZAN music dataset. Follow along to extract audio and image features, store them in Milvus, and search for similar songs through an API.
 
@@ -223,6 +233,18 @@ This playbook runs a few clips on one machine. Before you run something like it 
 | A GitHub Codespace (4 cores, 16 GB, the size this repo asks for) | Estimated $0.36 per hour at GitHub's list price (November 2026). A free personal account includes 120 core-hours a month, about 30 hours on this machine. In CI, `make run` in a freshly built devcontainer, including the first start of PostgreSQL and Milvus, took 85 s. |
 
 ## How it works
+
+```mermaid
+flowchart LR
+  A["Song metadata<br/>FastAPI into PostgreSQL"] --> B["Background job<br/>status in PostgreSQL"]
+  B --> C["Audio features<br/>librosa, 28 dims"]
+  B --> D["Image features<br/>ResNet-18, 512 dims"]
+  C --> E["Milvus<br/>one collection per modality"]
+  D --> E
+  E --> F["Similar songs<br/>vector search via the API"]
+  classDef key fill:#ffe8e3,stroke:#b4422e,color:#1f1a19
+  class E key
+```
 
 This feature store provides a comprehensive solution for processing and retrieving music data across multiple modalities (audio and image). The system extracts meaningful features from audio files and album artwork, stores them in optimized vector databases, and enables powerful similarity searches to find music with similar acoustic properties or visual aesthetics.
 
@@ -551,7 +573,7 @@ If this playbook helped you, a star helps other readers find it.
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-The datasets and models this playbook uses keep their own licenses. See [DATA_LICENSES.md](DATA_LICENSES.md).
+The datasets and models this playbook uses keep their own licenses. See [DATA_SOURCES.md](DATA_SOURCES.md).
 
 The MIT License is a permissive license that allows for reuse with few restrictions. You are free to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the software, provided that the original copyright notice and permission notice appear in all copies.
 
@@ -963,4 +985,7 @@ For development, it's recommended to:
 3. Install development dependencies with `pip install -r requirements-dev.txt` (if available)
 4. Run tests before submitting changes
 
+---
 
+[The book](https://oreil.ly/data-engineering-multimodal) · [All playbooks](https://github.com/Data-Engineering-for-Multimodal-AI#playbooks) · Previous: [Playbook 00: end-to-end](https://github.com/Data-Engineering-for-Multimodal-AI/playbook-00-multimodal-end-to-end-pipeline)
+<!-- Substack post for this playbook: add link here -->
