@@ -351,7 +351,7 @@ The book doesn't print this repository; these are the original steps, and they s
 
 ## Sample Data
 
-The repository includes sample audio and image files for testing, but these **do not appear in GitHub's web interface** because they are binary files. The sample data is organized as follows:
+The repository does not include the audio or image files. `make data` downloads the GTZAN dataset from Kaggle into `mmfeaturestore/sample_data/` (needs a Kaggle API token). The files are organized as follows:
 
 - **Audio samples**: Located in `/mmfeaturestore/sample_data/genres_original/{genre}/*.wav`
 - **Image samples**: Located in `/mmfeaturestore/sample_data/images_original/{genre}/*.png`
@@ -360,13 +360,11 @@ Genres include: pop, rock, jazz, classical, metal, blues, disco, reggae, hiphop,
 
 ### Obtaining Sample Data
 
-If the sample data is missing when you clone the repository, you can:
+To get the data, you can:
 
 1. Download the GTZAN dataset for audio samples: [GTZAN on Kaggle](https://www.kaggle.com/datasets/andradaolteanu/gtzan-dataset-music-genre-classification). `make data` downloads it into `mmfeaturestore/sample_data/` (needs a Kaggle API token).
 2. Place audio files in the appropriate genre folders under `mmfeaturestore/sample_data/genres_original/`
-3. Create or download album artwork images and place them in the corresponding folders under `mmfeaturestore/sample_data/images_original/`
-
-Or contact the repository maintainer for access to the full sample dataset.
+3. Place one image per clip in the corresponding folders under `mmfeaturestore/sample_data/images_original/`. The Kaggle download includes a mel spectrogram image for each clip.
 
 ## Usage
 
