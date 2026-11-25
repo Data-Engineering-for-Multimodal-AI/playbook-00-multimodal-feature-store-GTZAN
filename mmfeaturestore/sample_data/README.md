@@ -1,6 +1,6 @@
 # Sample Data
 
-This directory contains the sample audio and image files used for testing and demonstrating the multimodal feature store.
+This directory holds the audio and image files the feature store uses. They are not in the repository. From the repository root, `make data` downloads them here (needs a Kaggle API token).
 
 ## Important Note About GitHub
 
@@ -9,7 +9,7 @@ This directory contains the sample audio and image files used for testing and de
 2. Large binary files may be tracked with Git LFS or excluded from the repository
 3. Binary files in general don't display content previews in GitHub
 
-If you've cloned the repository and don't see these files locally, you'll need to download the sample data separately (see "Data Sources" below).
+If you don't see these files locally, run `make data` (see "Data Sources" below).
 
 ## Directory Structure
 
@@ -25,7 +25,7 @@ If you've cloned the repository and don't see these files locally, you'll need t
   - `reggae/`: Reggae music samples
   - `rock/`: Rock music samples
 
-- `images_original/`: Contains album artwork images (PNG format) organized by genre
+- `images_original/`: Contains spectrogram images (PNG format), one per audio clip, organized by genre
   - The directory structure mirrors the `genres_original/` directory
 
 ## Sample Usage
@@ -41,7 +41,7 @@ The audio samples are from the GTZAN dataset, which is a collection of 1000 audi
 
 You can download the GTZAN dataset from: [GTZAN on Kaggle](https://www.kaggle.com/datasets/andradaolteanu/gtzan-dataset-music-genre-classification). From the repository root, `make data` downloads it here (needs a Kaggle API token).
 
-The image samples are generated artwork that visually represents each genre's aesthetic.
+The images come in the same Kaggle download. Each one is a mel spectrogram of one audio clip, not album artwork.
 
 ## Expected File Names
 
