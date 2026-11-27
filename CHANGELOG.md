@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (v1.1.0)
+## v1.1.0 (2026-11-26)
 
 Not printed in the book. Nothing the book shows has changed.
 
@@ -25,6 +25,9 @@ Not printed in the book. Nothing the book shows has changed.
 - CI (`.github/workflows/smoke.yml`): Python 3.12 and 3.13, a weekly scheduled run, `make smoke`,
   `make run`, the `pip install -r requirements.txt` path with the API, and a job that builds the
   devcontainer and runs `make run` inside it.
+- `DATA_SOURCES.md`: the datasets and models this playbook uses, with their licenses and citations.
+- `make run` writes `.playbook-done` when it passes (ignored by git). `make card` in the
+  organization's `.github` repository reads these files and draws a completion card.
 
 ### Fixed
 - Audio features are standardized with `mmfeaturestore/models/audio_scaler.json` (statistics over 999
@@ -38,6 +41,8 @@ Not printed in the book. Nothing the book shows has changed.
   updated that one. The worker now updates the API's job.
 - `data` was a submodule link with no `.gitmodules`. The link is removed.
 - The GTZAN link (marsyas.info) no longer answers. The READMEs link to the Kaggle page.
+- README: a troubleshooting block appeared twice. The repeated copy is gone, and the short list of
+  common errors links to "Common Issues and Troubleshooting".
 
 ### Changed
 - README: "Overview" is now "How it works"; "Setup & Installation" is now "Run it the way the book
@@ -47,6 +52,9 @@ Not printed in the book. Nothing the book shows has changed.
   it, so `docker-compose up -d` starts the same containers from either folder. Milvus 3.0.3 (was
   2.3.3), etcd 3.5.25 and MinIO with health checks, data in named Docker volumes.
 - `pymilvus` is kept below 3.1, which removes the ORM API that `src/db/milvus.py` uses.
+- README: a header image (light and dark), badges for CI, Python, license and Codespaces, a diagram at
+  the top of "How it works", and a footer that links the book, all playbooks, and the previous and
+  next playbook.
 
 ### Removed
 - `mmfeaturestore/volumes/` (102 MB): etcd, Milvus and MinIO files from one local run, which loaded
